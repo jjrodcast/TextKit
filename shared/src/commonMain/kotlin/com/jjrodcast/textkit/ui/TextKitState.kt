@@ -53,6 +53,7 @@ import com.jjrodcast.textkit.ui.utils.save
  *
  * @param json The JSON string representing the initial state of the RichText component.
  * @param isViewer Whether the component is in read-only viewer mode.
+ * @param configuration Configuration object that holds the colors and sizes for UI components.
  * @param onUrlClicked The callback invoked when the user taps a URL in viewer mode.
  */
 @Composable
