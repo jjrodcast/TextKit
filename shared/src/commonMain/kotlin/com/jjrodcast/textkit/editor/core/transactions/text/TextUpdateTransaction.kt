@@ -1,13 +1,13 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
-import com.jjrodcast.textkit.editor.core.TextEditorManager
+import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
 import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransactionsUtils.getOffsetAfterDecorator
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransactionsUtils.reorderListItemsOnUpdate
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransactionsUtils.updateTransaction
@@ -16,8 +16,8 @@ internal object TextUpdateTransaction {
     internal fun updateText(
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextUpdated,
-        manager: TextEditorManager
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+        manager: TextKitEditorManager
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val selectedParagraphs = lines.paragraphsInSelectedRange.filter { it.piecesInSelectedRange.isNotEmpty() }
         return if (selectedParagraphs.size > 1) {
             val firstParagraphInRange = selectedParagraphs.first()
@@ -33,7 +33,7 @@ internal object TextUpdateTransaction {
         lastParagraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextUpdated
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val firstParagraphIncludesDecorator = firstParagraph.piecesInSelectedRange.first().piece.isDecorator
         val isLastDecoratorPartiallySelected =
             getOffsetAfterDecorator(lastParagraph, lastParagraph.piecesInSelectedRange.last().piece.offset) > 0
@@ -63,20 +63,20 @@ internal object TextUpdateTransaction {
         val nextParagraphsTransactions = reorderListItemsOnUpdate(lines)
         transactions.addAll(nextParagraphsTransactions)
 
-        return Pair(TextEditorRange(offset + actionModel.text.length), transactions)
+        return Pair(TextRange(offset + actionModel.text.length), transactions)
     }
 
     private fun TextEditorTransaction.updateOnSingleParagraph(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextUpdated
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return updateTextAfterDecorator(paragraph, actionModel)
     }
 
     private fun TextEditorTransaction.updateTextAfterDecorator(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextUpdated
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val transactions = mutableListOf<TextEditorListItemTransaction>()
         val selectionIncludesDecorator = paragraph.piecesInSelectedRange.first().piece.isDecorator
         var offset = actionModel.offset
@@ -93,7 +93,7 @@ internal object TextUpdateTransaction {
         val updateTransaction = updateTransaction(offset, model, length)
 
         val rangeOffset = offset + actionModel.text.length
-        val range = TextEditorRange(rangeOffset)
+        val range = TextRange(rangeOffset)
 
         transactions.add(updateTransaction)
 

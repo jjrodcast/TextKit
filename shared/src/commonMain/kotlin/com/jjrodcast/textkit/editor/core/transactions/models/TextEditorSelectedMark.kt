@@ -8,4 +8,8 @@ data class TextEditorSelectedMark(
     val marks: Set<Mark> = emptySet()
 ) {
     val listItemSelected get() = listItemSelectedValue ?: TextEditorListItem.None
+
+    companion object {
+        val NONE = TextEditorSelectedMark()
+    }
 }

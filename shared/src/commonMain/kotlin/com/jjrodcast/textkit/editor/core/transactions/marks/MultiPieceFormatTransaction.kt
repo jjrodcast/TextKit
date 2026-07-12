@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.transactions.marks
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
@@ -7,8 +8,8 @@ import com.jjrodcast.textkit.editor.core.piecetable.models.RichPieceTransaction
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.marks.models.MultiParagraph
 import com.jjrodcast.textkit.editor.core.transactions.marks.processors.TextEditorMarkProcessor
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.endsWithLineBreak
 import com.jjrodcast.textkit.editor.utils.fastForEach
 import com.jjrodcast.textkit.editor.utils.isLineBreak
@@ -20,19 +21,27 @@ internal object MultiPieceFormatTransaction {
         root: List<TextEditorModel>,
         prevFormatMarks: Set<Mark>,
         currFormatMarks: Set<Mark>,
-        range: TextEditorRange,
+        range: TextRange,
+        configuration: TextKitConfiguration,
         transactionType: TextEditorTransactionType
     ): Boolean {
         val paragraphs = createMultiParagraphs(root, range)
         paragraphs.fastForEach { paragraph ->
-            upsertMarks(transaction, paragraph, prevFormatMarks, currFormatMarks, transactionType)
+            upsertMarks(
+                transaction,
+                paragraph,
+                prevFormatMarks,
+                currFormatMarks,
+                configuration,
+                transactionType
+            )
         }
         return true
     }
 
     private fun createMultiParagraphs(
         models: List<TextEditorModel>,
-        range: TextEditorRange
+        range: TextRange
     ): List<MultiParagraph> {
         val paragraphs = arrayListOf<MultiParagraph>()
         // var so we can hand ownership to MultiParagraph and start a fresh list each paragraph,
@@ -50,14 +59,14 @@ internal object MultiPieceFormatTransaction {
                 val nStart =
                     if (items.first().pieceStart < start) start else items.first().pieceStart
                 val nEnd = minOf(items.last().pieceEnd, end)
-                paragraphs.add(MultiParagraph(range = TextEditorRange(nStart, nEnd), texts = items))
+                paragraphs.add(MultiParagraph(range = TextRange(nStart, nEnd), texts = items))
                 items = arrayListOf()
             }
         }
         if (items.isNotEmpty()) {
             val nStart = if (items.first().pieceStart < start) start else items.first().pieceStart
             val nEnd = minOf(items.last().pieceEnd, end)
-            paragraphs.add(MultiParagraph(range = TextEditorRange(nStart, nEnd), texts = items))
+            paragraphs.add(MultiParagraph(range = TextRange(nStart, nEnd), texts = items))
         }
         return paragraphs.filter { !it.range.collapsed || (it.texts.size == 1 && it.texts.first().text.isLineBreak()) }
     }
@@ -67,6 +76,7 @@ internal object MultiPieceFormatTransaction {
         multiParagraph: MultiParagraph,
         prevFormatMarks: Set<Mark>,
         currFormatMarks: Set<Mark>,
+        configuration: TextKitConfiguration,
         transactionType: TextEditorTransactionType
     ) {
         if (multiParagraph.isEmpty()) return
@@ -83,6 +93,7 @@ internal object MultiPieceFormatTransaction {
             prevFormatMarks,
             currFormatMarks,
             range,
+            configuration,
             transactionType
         )
         transaction.upsertMarks(transactions)
@@ -95,7 +106,8 @@ internal object MultiPieceFormatTransaction {
         right: TextEditorModel?,
         prevFormatMarks: Set<Mark>,
         currFormatMarks: Set<Mark>,
-        range: TextEditorRange,
+        range: TextRange,
+        configuration: TextKitConfiguration,
         transactionType: TextEditorTransactionType
     ): List<RichPieceTransaction> {
         if (centralElements.isEmpty()) return emptyList()
@@ -106,7 +118,12 @@ internal object MultiPieceFormatTransaction {
             val currentModel = centralElements.first()
             val pieceMarks = currentModel.piece.marks + transactionType.marks
             val finalMarks =
-                TextEditorMarkProcessor.process(pieceMarks, prevFormatMarks, currFormatMarks)
+                TextEditorMarkProcessor.process(
+                    pieceMarks,
+                    prevFormatMarks,
+                    currFormatMarks,
+                    configuration
+                )
 
             val transactionMarks = when {
                 canMergeWithPrevious(left.piece, currentModel.piece, finalMarks) -> {
@@ -148,7 +165,8 @@ internal object MultiPieceFormatTransaction {
             val finalMarks = TextEditorMarkProcessor.process(
                 currentModel.piece.marks,
                 prevFormatMarks,
-                currFormatMarks
+                currFormatMarks,
+                configuration
             )
             val offset = if (i == 0) range.start else currentModel.offsetInDocument
             val adjustedRange =
@@ -230,7 +248,7 @@ internal object MultiPieceFormatTransaction {
      */
     private fun findParagraphBoundaries(
         elements: List<TextEditorModel>,
-        range: TextEditorRange
+        range: TextRange
     ): ParagraphBoundaries {
         // First index where pieceEnd > range.min (element overlaps the range start).
         var lo = 0
@@ -272,18 +290,17 @@ internal object MultiPieceFormatTransaction {
     private fun getAdjustedRange(
         piece: RichPiece,
         pieceOffset: Int,
-        range: TextEditorRange
-    ): TextEditorRange {
-        val pieceStart = pieceOffset
-        val pieceEnd = pieceStart + piece.length
+        range: TextRange
+    ): TextRange {
+        val pieceEnd = pieceOffset + piece.length
 
-        val adjustedStart = maxOf(range.start, pieceStart)
+        val adjustedStart = maxOf(range.start, pieceOffset)
         val adjustedEnd = minOf(range.end, pieceEnd)
 
-        val relativeStart = adjustedStart - pieceStart
-        val relativeEnd = adjustedEnd - pieceStart
+        val relativeStart = adjustedStart - pieceOffset
+        val relativeEnd = adjustedEnd - pieceOffset
 
-        return TextEditorRange(relativeStart, relativeEnd)
+        return TextRange(relativeStart, relativeEnd)
     }
 
     private data class ParagraphBoundaries(

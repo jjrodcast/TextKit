@@ -1,28 +1,28 @@
 package com.jjrodcast.textkit.editor.core.transactions.lists.utils
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toLevel
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 
 internal object ListItemTextEditorRangeUtils {
 
     internal fun getTextEditorRangeForCollapsed(
         items: List<PositionalListItem>,
         index: Int,
-        range: TextEditorRange
-    ): TextEditorRange {
+        range: TextRange
+    ): TextRange {
         val diffs = items
             .filter { it.modified && it.index <= index }
             .sumOf { it.getDecoratorDiff() }
 
-        return range.copy(start = range.start + diffs, end = range.end + diffs)
+        return TextRange(start = range.start + diffs, end = range.end + diffs)
     }
 
     internal fun getTextEditorRangeForRange(
         items: List<PositionalListItem>,
         indices: List<Int>,
-        range: TextEditorRange
-    ): TextEditorRange {
+        range: TextRange
+    ): TextRange {
         val startDiff = items
             .firstOrNull { it.modified && it.index == indices.first() }.getDecoratorDiff()
 
@@ -30,14 +30,14 @@ internal object ListItemTextEditorRangeUtils {
             .filter { it.modified && it.index in indices }
             .sumOf { it.getDecoratorDiff() }
 
-        return range.copy(start = range.start + startDiff, end = range.end + totalDiff)
+        return TextRange(start = range.start + startDiff, end = range.end + totalDiff)
     }
 
     internal fun getTextEditorRangeForMultiRange(
         items: List<PositionalListItem>,
         indices: List<Int>,
-        range: TextEditorRange
-    ): TextEditorRange {
+        range: TextRange
+    ): TextRange {
         val startDiff = items
             .firstOrNull { it.modified && it.index == indices.first() }.getDecoratorDiffForMultiple()
 
@@ -45,14 +45,14 @@ internal object ListItemTextEditorRangeUtils {
             .filter { it.modified && it.index in indices }
             .sumOf { it.getDecoratorDiffForMultiple() }
 
-        return range.copy(start = range.start + startDiff, end = range.end + totalDiff)
+        return TextRange(start = range.start + startDiff, end = range.end + totalDiff)
     }
 
     internal fun getTextEditorRangeForInsertedRange(
         items: List<PositionalListItem>,
         indices: List<Int>,
-        range: TextEditorRange
-    ): TextEditorRange {
+        range: TextRange
+    ): TextRange {
         val startDiff = items
             .firstOrNull { it.modified && it.index == indices.first() }
             ?.newRichPiece?.decorator?.length ?: 0
@@ -61,7 +61,7 @@ internal object ListItemTextEditorRangeUtils {
             .filter { it.modified && it.index in indices }
             .sumOf { it.newRichPiece.decorator?.length ?: 0 }
 
-        return range.copy(start = range.start + startDiff, end = range.end + totalDiff)
+        return TextRange(start = range.start + startDiff, end = range.end + totalDiff)
     }
 
     private fun PositionalListItem?.getDecoratorDiff(): Int {

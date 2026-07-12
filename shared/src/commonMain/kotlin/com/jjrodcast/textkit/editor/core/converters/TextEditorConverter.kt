@@ -23,6 +23,7 @@ import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.EMPTY
 import com.jjrodcast.textkit.editor.utils.RegexUtils
 import com.jjrodcast.textkit.editor.utils.addLineBreak
@@ -30,23 +31,32 @@ import com.jjrodcast.textkit.editor.utils.fastForEach
 import com.jjrodcast.textkit.editor.utils.fastMapIndexed
 import com.jjrodcast.textkit.editor.utils.isLineBreak
 import com.jjrodcast.textkit.editor.utils.removeLineBreakSuffix
+import com.jjrodcast.textkit.editor.utils.toHex
+import com.jjrodcast.textkit.editor.utils.toHexWithAlpha
 
 internal object TextEditorConverter {
 
-    internal fun geAsText(document: TextEditorDocument): String {
+    internal fun geAsText(
+        document: TextEditorDocument,
+        configuration: TextKitConfiguration
+    ): String {
         // Eliminate the intermediate flatMap list: iterate paragraphs and styledText directly,
         // avoiding one O(P×M) allocation before the append loop.
         val builder = StringBuilder()
-        getAsTextWithMarks(document).paragraph.fastForEach { paragraph ->
+        getAsTextWithMarks(document, configuration).paragraph.fastForEach { paragraph ->
             paragraph.styledText.fastForEach { model -> builder.append(model.text) }
         }
         return builder.toString()
     }
 
-    internal fun getAsTextWithMarks(document: TextEditorDocument): TextEditorDocumentModel {
+    internal fun getAsTextWithMarks(
+        document: TextEditorDocument,
+        configuration: TextKitConfiguration
+    ): TextEditorDocumentModel {
         val lines = arrayListOf<TextEditorParagraphModel>()
         document.content.filterNot { it is ParagraphNone }.fastForEach { paragraph ->
-            val items = paragraph.getParagraphContentWithMarkers().filter { it.text.isNotEmpty() }
+            val items = paragraph.getParagraphContentWithMarkers(configuration = configuration)
+                .filter { it.text.isNotEmpty() }
             lines.add(TextEditorParagraphModel(items))
         }
         return TextEditorDocumentModel(lines.removeLastBreakLine())
@@ -77,13 +87,24 @@ internal object TextEditorConverter {
         return paragraphs
     }
 
-    private fun BaseParagraph.getParagraphContentWithMarkers(decorator: TextDecoratorModel? = null): List<TextEditorModel> {
+    private fun BaseParagraph.getParagraphContentWithMarkers(
+        decorator: TextDecoratorModel? = null,
+        configuration: TextKitConfiguration
+    ): List<TextEditorModel> {
         val items = arrayListOf<TextEditorModel>()
         when (this) {
             is Paragraph -> {
                 if (this.content.isEmpty()) items.add(TextEditorModel.create(EMPTY))
                 else {
-                    this.content.fastForEach { text -> items.addAll(text.getTextContentWithMarkers(decorator, null)) }
+                    this.content.fastForEach { text ->
+                        items.addAll(
+                            text.getTextContentWithMarkers(
+                                decorator,
+                                configuration,
+                                null
+                            )
+                        )
+                    }
                 }
                 when (decorator) {
                     is TextDecoratorModel.BlockquoteDecorator -> items.postProcessBlockquotes()
@@ -94,7 +115,15 @@ internal object TextEditorConverter {
             is Heading -> {
                 if (this.content.isEmpty()) items.add(TextEditorModel.create(EMPTY))
                 else {
-                    this.content.fastForEach { text -> items.addAll(text.getTextContentWithMarkers(decorator, attrs.level)) }
+                    this.content.fastForEach { text ->
+                        items.addAll(
+                            text.getTextContentWithMarkers(
+                                decorator,
+                                configuration,
+                                attrs.level
+                            )
+                        )
+                    }
                 }
                 items.postProcessParagraph(decorator)
             }
@@ -104,7 +133,11 @@ internal object TextEditorConverter {
                 this.content.fastForEach { text ->
                     items.addAll(
                         text.getTextContentWithMarkers(
-                            TextDecoratorModel.NumberDecoratorModel(count = localOrder, level = decorator?.level ?: 0)
+                            TextDecoratorModel.NumberDecoratorModel(
+                                count = localOrder,
+                                level = decorator?.level ?: 0
+                            ),
+                            configuration
                         )
                     )
                     localOrder++
@@ -113,7 +146,14 @@ internal object TextEditorConverter {
 
             is BulletedList -> {
                 this.content.fastForEach { text ->
-                    items.addAll(text.getTextContentWithMarkers(TextDecoratorModel.BulletDecoratorModel(level = decorator?.level ?: 0)))
+                    items.addAll(
+                        text.getTextContentWithMarkers(
+                            TextDecoratorModel.BulletDecoratorModel(
+                                level = decorator?.level ?: 0
+                            ),
+                            configuration
+                        )
+                    )
                 }
             }
 
@@ -122,8 +162,11 @@ internal object TextEditorConverter {
                     items.addAll(
                         text.getTextContentWithMarkers(
                             TextDecoratorModel.TaskDecoratorModel(
-                                checked = text.attrs.checked, level = decorator?.level ?: 0, nestedCount = content.size
-                            )
+                                checked = text.attrs.checked,
+                                level = decorator?.level ?: 0,
+                                nestedCount = content.size
+                            ),
+                            configuration
                         )
                     )
                 }
@@ -132,7 +175,14 @@ internal object TextEditorConverter {
             is Blockquote -> {
                 var group = 1
                 this.content.fastForEach { paragraph ->
-                    items.addAll(paragraph.getParagraphContentWithMarkers(TextDecoratorModel.BlockquoteDecorator(group)))
+                    items.addAll(
+                        paragraph.getParagraphContentWithMarkers(
+                            TextDecoratorModel.BlockquoteDecorator(
+                                group
+                            ),
+                            configuration
+                        )
+                    )
                 }
                 group++
             }
@@ -145,11 +195,15 @@ internal object TextEditorConverter {
     private fun ArrayList<TextEditorModel>.postProcessParagraph(decorator: TextDecoratorModel?) {
         if (isNotEmpty()) {
             decorator?.let {
-                add(0, TextEditorModel.create(text = decorator.createDecoratorString(), decorator = it))
+                add(
+                    0,
+                    TextEditorModel.create(text = decorator.createDecoratorString(), decorator = it)
+                )
             }
             val lastItem = last()
             removeAt(lastIndex)
-            val lastText = if (lastItem.text.isLineBreak()) lastItem.text else lastItem.text.addLineBreak()
+            val lastText =
+                if (lastItem.text.isLineBreak()) lastItem.text else lastItem.text.addLineBreak()
             add(lastItem.copy(text = lastText))
         }
     }
@@ -157,14 +211,16 @@ internal object TextEditorConverter {
     private fun ArrayList<TextEditorModel>.postProcessBlockquotes() {
         if (isNotEmpty()) {
             val lastItem = removeAt(lastIndex)
-            val lastText = if (lastItem.text.isLineBreak()) lastItem.text else lastItem.text.addLineBreak()
+            val lastText =
+                if (lastItem.text.isLineBreak()) lastItem.text else lastItem.text.addLineBreak()
             add(lastItem.copy(text = lastText))
         }
     }
 
     private fun BaseText.getTextContentWithMarkers(
         decorator: TextDecoratorModel? = null,
-        headingLevel: Int? = null
+        configuration: TextKitConfiguration,
+        headingLevel: Int? = null,
     ): List<TextEditorModel> {
         val items = arrayListOf<TextEditorModel>()
         when (this) {
@@ -174,38 +230,57 @@ internal object TextEditorConverter {
             }
 
             is Text -> {
-                val newMarks = recreateMarks(marks, headingLevel)
+                val newMarks = recreateMarks(marks, configuration, headingLevel)
                 val newDecorator = decorator as? TextDecoratorModel.BlockquoteDecorator
-                items.add(TextEditorModel.create(text = text, marks = newMarks, decorator = newDecorator))
+                items.add(
+                    TextEditorModel.create(
+                        text = text,
+                        marks = newMarks,
+                        decorator = newDecorator
+                    )
+                )
             }
 
             is ListItem -> {
                 this.content.fastForEach { item ->
-                    items.addAll(item.getParagraphContentWithMarkers(decorator?.copyValue(decorator.level + 1)))
+                    items.addAll(
+                        item.getParagraphContentWithMarkers(
+                            decorator?.copyValue(decorator.level + 1),
+                            configuration
+                        )
+                    )
                 }
             }
 
             is TaskListItem -> {
                 this.content.fastMapIndexed { index, item ->
-                    val itemDecorator = if (content.size > 1 && index == 0 || content.size <= 1) decorator?.copyValue(
-                        decorator.level + 1,
-                        nestedCount = content.size
-                    ) else null
-                    items.addAll(item.getParagraphContentWithMarkers(itemDecorator))
+                    val itemDecorator =
+                        if (content.size > 1 && index == 0 || content.size <= 1) decorator?.copyValue(
+                            decorator.level + 1,
+                            nestedCount = content.size
+                        ) else null
+                    items.addAll(item.getParagraphContentWithMarkers(itemDecorator, configuration))
                 }
             }
         }
         return items
     }
 
-    private fun recreateMarks(marks: Set<Mark>, headingLevel: Int?): Set<Mark> {
-        val styleMark = createTextStyleFromLevel(headingLevel)
+    private fun recreateMarks(
+        marks: Set<Mark>,
+        configuration: TextKitConfiguration,
+        headingLevel: Int?
+    ): Set<Mark> {
+        val styleMark = createTextStyleFromLevel(headingLevel, configuration)
         val (styleMarks, otherMarks) = marks.plus(styleMark).partition { it is TextStyleMark }
         val newStyleMarks = convertRgbToHex(styleMarks.firstOrNull() as? TextStyleMark)
         return otherMarks.toSet().plus(newStyleMarks)
     }
 
-    private fun createTextStyleFromLevel(level: Int?): Set<Mark> {
+    private fun createTextStyleFromLevel(
+        level: Int?,
+        configuration: TextKitConfiguration
+    ): Set<Mark> {
         val levelToValue = when (level) {
             HeadingLevels.H1 -> HeadingLevelsValues.H1
             HeadingLevels.H2 -> HeadingLevelsValues.H2
@@ -217,7 +292,13 @@ internal object TextEditorConverter {
         }
 
         val mark = if (levelToValue == null) null
-        else TextStyleMark.Default.copy(attrs = TextStyleMark.Default.attrs.copy(fontSize = levelToValue))
+        else {
+            configuration.textColor
+            TextStyleMark.getDefault(
+                color = configuration.textColor.toHex(),
+                fontSize = levelToValue
+            )
+        }
         return setOfNotNull(mark)
     }
 

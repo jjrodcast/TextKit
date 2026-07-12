@@ -1,11 +1,11 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
-import com.jjrodcast.textkit.editor.core.TextEditorManager
+import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 
 /**
  * This class manage the list item editting using the keyboard.
@@ -14,8 +14,8 @@ object TextTransaction {
 
     fun onTextUpdated(
         actionModel: TextEditorAction,
-        manager: TextEditorManager
-    ): Pair<Boolean, TextEditorRange> {
+        manager: TextKitEditorManager
+    ): Pair<Boolean, TextRange> {
         val (selection, transactions) = when (actionModel) {
             is TextEditorAction.TextAdded -> {
                 val lines = manager.transaction.getLineContentWithNeigborParagraphs(actionModel.offset, actionModel.offset)
@@ -37,7 +37,7 @@ object TextTransaction {
                 TextUpdateTransaction.updateText(lines, actionModel, manager)
             }
 
-            else -> Pair(TextEditorRange(0), emptyList())
+            else -> Pair(TextRange(0), emptyList())
         }
 
         manager.transaction.commitChanges(transactions)

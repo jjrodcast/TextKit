@@ -1,12 +1,12 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
 import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.plangrid.pgfoundation.texteditor.core.validator.ListItemValidator
 import com.plangrid.pgfoundation.texteditor.core.validator.TextInputResult
 
@@ -15,7 +15,7 @@ actual object TextDecoratorTransaction {
         paragraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return when (paragraph.startPiece.decorator) {
             is TextDecoratorModel.TaskDecoratorModel -> deleteTaskDecorator(paragraph, actionModel)
             else -> TextTransactionsUtils.getCommonDeleteDecoratorTransactions(paragraph, lines)
@@ -47,7 +47,7 @@ actual object TextDecoratorTransaction {
     private fun deleteTaskDecorator(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val decoratorOffset = paragraph.startOffset
         val deleteOffset = actionModel.offset - decoratorOffset
         val leftText = paragraph.startText.substring(0, deleteOffset)
@@ -63,7 +63,7 @@ actual object TextDecoratorTransaction {
                 paragraph.startPiece.length
             )
 
-            Pair(TextEditorRange(actionModel.offset), listOf(transaction))
+            Pair(TextRange(actionModel.offset), listOf(transaction))
         } else {
             val model = TextEditorModel.create(text = newText)
             val transaction = TextTransactionsUtils.updateTransaction(
@@ -71,7 +71,7 @@ actual object TextDecoratorTransaction {
                 model,
                 paragraph.startPiece.length
             )
-            Pair(TextEditorRange(actionModel.offset), listOf(transaction))
+            Pair(TextRange(actionModel.offset), listOf(transaction))
         }
     }
 }

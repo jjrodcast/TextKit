@@ -1,12 +1,13 @@
 package com.jjrodcast.textkit.editor.core.models
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toLevel
 import com.jjrodcast.textkit.editor.models.MarkSearchType
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.EMPTY
 import com.jjrodcast.textkit.editor.utils.fastForEach
 import com.jjrodcast.textkit.editor.utils.intersect
@@ -45,7 +46,13 @@ internal data class MultiPieceParagraph(
 
     val textInRange
         get() = buildString {
-            paragraphs.fastForEach { paragraph -> paragraph.piecesInSelectedRange.fastForEach { append(it.text) } }
+            paragraphs.fastForEach { paragraph ->
+                paragraph.piecesInSelectedRange.fastForEach {
+                    append(
+                        it.text
+                    )
+                }
+            }
         }
 
     val textOutOfRange
@@ -186,7 +193,11 @@ internal data class MultiPieceParagraph(
      * - keepSearching=true: binary-search [nullDecoratorBoundaries] to bound the region,
      *   then slice [paragraphsByLevel] to that window.
      */
-    fun searchSameLevelItems(startIndex: Int, level: Int, keepSearching: Boolean = false): List<PieceParagraph> {
+    fun searchSameLevelItems(
+        startIndex: Int,
+        level: Int,
+        keepSearching: Boolean = false
+    ): List<PieceParagraph> {
         val levelIndices = paragraphsByLevel[level] ?: return emptyList()
 
         if (keepSearching) {
@@ -211,8 +222,8 @@ internal data class MultiPieceParagraph(
         return levelIndices.subList(left, right + 1).map { paragraphs[it] }
     }
 
-    internal fun getMarksWithType(): MarkSearchType {
-        val range = TextEditorRange(start, end)
+    internal fun getMarksWithType(configuration: TextKitConfiguration): MarkSearchType {
+        val range = TextRange(start, end)
         val data = getAllModelsInRange()
         return when {
             data.isEmpty() -> MarkSearchType()
@@ -225,7 +236,7 @@ internal data class MultiPieceParagraph(
                     val piece = element.piece
                     val newRange = if (range.collapsed) {
                         val hasLineBreak = element.piece.endsWithLineBreak
-                        range.copy(
+                        TextRange(
                             start = element.offsetInDocument,
                             end = element.offsetInDocument + if (hasLineBreak) piece.length - 1 else piece.length
                         )
@@ -252,9 +263,14 @@ internal data class MultiPieceParagraph(
             else -> {
                 val marksInRange = getMarksInRange(data)
                 val paragraphTypes = data.map { it.paragraphType }.toSet()
-                val listItemType = if (paragraphTypes.size == 1) paragraphTypes.first() else TextEditorListItem.None
-                val text = data.filter { !it.isDecorator }.joinToString(separator = EMPTY) { it.text.removeLineBreakSuffix() }
-                val filteredMarks = marksInRange.mapNotNull { if (it is TextStyleMark && TextStyleMark.isDefault(it)) null else it }.toSet()
+                val listItemType =
+                    if (paragraphTypes.size == 1) paragraphTypes.first() else TextEditorListItem.None
+                val text = data.filter { !it.isDecorator }
+                    .joinToString(separator = EMPTY) { it.text.removeLineBreakSuffix() }
+                val filteredMarks = marksInRange.mapNotNull {
+                    if (it is TextStyleMark && TextStyleMark.isDefault(it, configuration)) null
+                    else it
+                }.toSet()
                 MarkSearchType(filteredMarks, listItemType, range, text)
             }
         }

@@ -1,10 +1,10 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
 import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.plangrid.pgfoundation.texteditor.core.validator.TextInputResult
 
 expect object TextDecoratorTransaction {
@@ -21,7 +21,7 @@ expect object TextDecoratorTransaction {
         paragraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>>
+    ): Pair<TextRange, List<TextEditorListItemTransaction>>
 
     internal fun getUpdateDecoratorTransaction(
         inputResult: TextInputResult,

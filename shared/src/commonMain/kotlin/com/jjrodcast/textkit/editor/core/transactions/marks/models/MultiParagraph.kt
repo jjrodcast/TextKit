@@ -1,12 +1,12 @@
 package com.jjrodcast.textkit.editor.core.transactions.marks.models
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.utils.fastForEach
 import com.jjrodcast.textkit.editor.utils.isLineBreak
 
 internal data class MultiParagraph(
-    val range: TextEditorRange,
+    val range: TextRange,
     val texts: List<TextEditorModel>
 ) {
     private val fullText

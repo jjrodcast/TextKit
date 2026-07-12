@@ -9,7 +9,9 @@ import com.jjrodcast.textkit.editor.core.parser.MarkTypes.Link
 import com.jjrodcast.textkit.editor.core.parser.MarkTypes.Strike
 import com.jjrodcast.textkit.editor.core.parser.MarkTypes.TextStyle
 import com.jjrodcast.textkit.editor.core.parser.MarkTypes.Underline
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.SEPARATOR
+import com.jjrodcast.textkit.editor.utils.toHex
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -30,10 +32,7 @@ sealed class Mark {
         is HighlightMark -> Highlight
         is UnderlineMark -> Underline
         is StrikeMark -> Strikethrough
-        is TextStyleMark -> TextStyle(
-            fontSize = attrs.fontSize.toFloat(),
-            color = attrs.color.orEmpty()
-        )
+        is TextStyleMark -> TextStyle(fontSize = attrs.fontSize, color = attrs.color.orEmpty())
 
         else -> null
     }
@@ -108,21 +107,16 @@ data class TextStyleMark(val attrs: TextStyleAttrs) : Mark() {
 
     companion object {
 
-        //TODO()
-        fun isDefault(mark: TextStyleMark): Boolean {
+        fun isDefault(mark: TextStyleMark, configuration: TextKitConfiguration): Boolean {
             val fontSize = mark.attrs.fontSize
             val color = mark.attrs.color
-            return color == "" && fontSize == TextStyleAttrs.getDefaultFontSize()
+            return color == configuration.textColor.toHex() && fontSize == configuration.fontSize
         }
 
-        //TODO()
-        val Default
-            get() = TextStyleMark(
-                TextStyleAttrs(
-                    color = "",
-                    fontSize = TextStyleAttrs.getDefaultFontSize()
-                )
-            )
+        fun getDefault(color: String?, fontSize: Int): TextStyleMark {
+            return TextStyleMark(TextStyleAttrs(color = color, fontSize = fontSize))
+        }
+
     }
 }
 

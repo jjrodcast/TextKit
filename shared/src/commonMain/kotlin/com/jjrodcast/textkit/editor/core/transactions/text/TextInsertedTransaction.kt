@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
@@ -18,7 +19,6 @@ import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Co
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.plangrid.pgfoundation.texteditor.core.validator.ListItemValidator
 import com.plangrid.pgfoundation.texteditor.core.validator.TextInputResult
 import com.jjrodcast.textkit.editor.utils.TABS
@@ -30,7 +30,7 @@ internal object TextInsertedTransaction {
     internal fun addText(
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val currentParagraph = lines.paragraphsInSelectedRange.firstOrNull()
         val isAtEndOfParagraph = currentParagraph?.isAtEndOfParagraph(actionModel.offset, actionModel.offset) ?: false
         val updatedSelectedParagraph = if (isAtEndOfParagraph) {
@@ -60,7 +60,7 @@ internal object TextInsertedTransaction {
         paragraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val listParagraphs = lines.paragraphs.filter { it.isListItem }
         val filteredParagraphs = MultiPieceParagraph(
             listParagraphs,
@@ -90,7 +90,7 @@ internal object TextInsertedTransaction {
     private fun insertTextInParagraph(
         paragraph: PieceParagraph?,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return when {
             paragraph == null || paragraph.text.isLineBreak() -> insertTextInParagraph(
                 actionModel,
@@ -105,7 +105,7 @@ internal object TextInsertedTransaction {
     private fun insertTextInNonEmptyParagraph(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         // We need to validate if the text added matches with the regex
         val input = matchesListItemPattern(paragraph, actionModel)
         // It matches the regex, so we need to insert the decorator, otherwise just add the text
@@ -118,7 +118,7 @@ internal object TextInsertedTransaction {
                 is TextEditorDecoratorTransactionType.Update -> type.model.text.length
             }
             Pair(
-                TextEditorRange(paragraph.startOffset + modelLength),
+                TextRange(paragraph.startOffset + modelLength),
                 listOf(updateTransaction)
             )
         } else {
@@ -130,19 +130,19 @@ internal object TextInsertedTransaction {
     private fun insertTextInParagraph(
         actionModel: TextEditorAction.TextAdded,
         marks: Set<Mark>
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = null)
         val transaction = TextTransactionsUtils.insertTransaction(actionModel.offset, model)
         val rangeOffset = actionModel.offset + actionModel.text.length
 
-        return Pair(TextEditorRange(rangeOffset), listOf(transaction))
+        return Pair(TextRange(rangeOffset), listOf(transaction))
     }
 
     private fun addLineBreakToListItem(
         currentParagraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val listItems = ListsConverter.fromPieceMultiParagraph(lines)
         val currentDecorator = currentParagraph.startPiece.decorator
         val currentIndex = PositionalListItemUtils.findItemByOffset(listItems, currentParagraph.startOffset)?.index ?: 0
@@ -168,7 +168,7 @@ internal object TextInsertedTransaction {
         lines: MultiPieceParagraph,
         currentDecorator: TextDecoratorModel?,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val transactions = mutableListOf<TextEditorListItemTransaction>()
 
         val positionalListItems = PositionalListItemUtils.decreaseLevels(lines, listOf(currentIndex))
@@ -185,7 +185,7 @@ internal object TextInsertedTransaction {
         val nextLevelTabsLength = if (currentParagraph.startPiece.decorator.toLevel() > 1) TABS.length else length
         val rangeOffset = actionModel.offset - nextLevelTabsLength
 
-        return Pair(TextEditorRange(rangeOffset), transactions)
+        return Pair(TextRange(rangeOffset), transactions)
     }
 
     /**
@@ -199,7 +199,7 @@ internal object TextInsertedTransaction {
         listItems: List<PositionalListItem>,
         currentDecorator: TextDecoratorModel?,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val transactions = mutableListOf<TextEditorListItemTransaction>()
         val currentDecoratorCount = (currentDecorator?.toCount() ?: 1).plus(1)
         val text = currentDecorator.toNewDecoratorModel(currentDecoratorCount).createDecoratorString()
@@ -215,14 +215,14 @@ internal object TextInsertedTransaction {
         transactions.add(TextTransactionsUtils.insertTransaction(actionModel.offset, textMarksModel))
 
         val length = currentDecorator.createDecoratorString().length
-        val newRange = TextEditorRange(actionModel.offset + actionModel.text.length + length)
+        val newRange = TextRange(actionModel.offset + actionModel.text.length + length)
 
         return Pair(newRange, transactions)
     }
 
-    private fun preventTextInsertionOnDecorator(paragraph: PieceParagraph): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    private fun preventTextInsertionOnDecorator(paragraph: PieceParagraph): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val offset = paragraph.startOffset + paragraph.startPiece.length + 1
-        return Pair(TextEditorRange(offset), emptyList())
+        return Pair(TextRange(offset), emptyList())
     }
 
     private fun getMarksForInsertion(marks: Set<Mark>, filterLinkMarks: Boolean = false): Set<Mark> {
@@ -292,7 +292,7 @@ internal object TextInsertedTransaction {
     private fun insertTextOnTaskListDecorator(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextAdded
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val listItemValidationResult = matchesListItemPattern(paragraph, actionModel)
 
         return if (listItemValidationResult != null) {
@@ -302,7 +302,7 @@ internal object TextInsertedTransaction {
                 paragraph.startPiece.length
             )
             val length = listItemValidationResult.model.text.length
-            Pair(TextEditorRange(paragraph.startOffset + length), listOf(transaction))
+            Pair(TextRange(paragraph.startOffset + length), listOf(transaction))
         } else {
             // Insert decorator content as text plus inserted text
             val cursorPosition = actionModel.offset - paragraph.startOffset
@@ -319,7 +319,7 @@ internal object TextInsertedTransaction {
                 paragraph.startPiece.length
             )
 
-            Pair(TextEditorRange(paragraph.startOffset + finalText.length), listOf(updateTransaction))
+            Pair(TextRange(paragraph.startOffset + finalText.length), listOf(updateTransaction))
         }
     }
 }

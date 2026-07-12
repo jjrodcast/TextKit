@@ -1,11 +1,11 @@
 package com.jjrodcast.textkit.editor.core.transactions.lists
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem.BulletedList
 import com.jjrodcast.textkit.editor.components.TextEditorListItem.CheckList
 import com.jjrodcast.textkit.editor.components.TextEditorListItem.None
 import com.jjrodcast.textkit.editor.components.TextEditorListItem.NumberedList
-import com.jjrodcast.textkit.editor.components.toFinalListItemType
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem.Companion.getNewDecoratorLength
@@ -29,7 +29,6 @@ import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDec
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType.Update
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.lists.utils.ListItemTextEditorRangeUtils
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransactionsUtils
 
 internal object ListItemTransaction {
@@ -38,8 +37,8 @@ internal object ListItemTransaction {
         transaction: TextEditorTransaction,
         prevListItem: TextEditorDecoratorItem,
         listItem: TextEditorDecoratorItem,
-        range: TextEditorRange
-    ): Pair<Boolean, TextEditorRange> {
+        range: TextRange
+    ): Pair<Boolean, TextRange> {
         val originalLines = transaction.getLineContentWithNeigborParagraphs(range.min, range.max)
 
         val lines = MultiPieceParagraph(paragraphs = originalLines.paragraphs, start = originalLines.start, end = originalLines.end)
@@ -58,9 +57,9 @@ internal object ListItemTransaction {
     private fun applyCollapsedChanges(
         lines: MultiPieceParagraph,
         prevListItem: TextEditorDecoratorItem,
-        range: TextEditorRange,
+        range: TextRange,
         listItem: TextEditorDecoratorItem
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         val filteredLines = lines.paragraphsInSelectedRange.filter { !it.isAtEndOfParagraph(range.start, range.end) }
         val newItems =
             if (range.collapsed && filteredLines.isEmpty()) listOfNotNull(lines.findParagraphBy(range.end + 1)) else filteredLines
@@ -74,7 +73,7 @@ internal object ListItemTransaction {
                 decorator = newDecoratorMarksModel
             )
             val transactions = listOf(TextTransactionsUtils.insertTransaction(range.start, textMarksModel))
-            val newRange = TextEditorRange(range.end + textMarksModel.text.length)
+            val newRange = TextRange(range.end + textMarksModel.text.length)
             return Pair(transactions, newRange)
         }
 
@@ -99,8 +98,8 @@ internal object ListItemTransaction {
         lines: MultiPieceParagraph,
         currentIndex: Int,
         currListItem: TextEditorDecoratorItem,
-        range: TextEditorRange
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+        range: TextRange
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         // Updating the decorator of the current paragraph — functional update, no mutation.
         val updatedParagraphs = lines.paragraphs.toMutableList()
         updatedParagraphs[currentIndex] = updatedParagraphs[currentIndex].addDecoratorIfNull(currListItem)
@@ -109,7 +108,7 @@ internal object ListItemTransaction {
         val modifiedItem = flattenItems.firstOrNull { it.index == currentIndex }
         val transactions = flattenItems.createTransactions(listOf(modifiedItem))
         val offset = modifiedItem.getNewDecoratorLength()
-        return Pair(transactions, range.copy(start = range.start + offset, end = range.end + offset))
+        return Pair(transactions, TextRange(start = range.start + offset, end = range.end + offset))
     }
 
     private fun PieceParagraph.addDecoratorIfNull(currListItem: TextEditorDecoratorItem): PieceParagraph {
@@ -137,13 +136,13 @@ internal object ListItemTransaction {
     private fun updateListItemToParagraph(
         lines: MultiPieceParagraph,
         currentIndex: Int,
-        range: TextEditorRange
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+        range: TextRange
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         val positionalListItems = PositionalListItemUtils.decreaseLevels(lines, listOf(currentIndex))
         val flattenItems = PositionalListItemUtils.reorderItems(items = positionalListItems, coerceLevel = false)
         val transactions = flattenItems.createTransactions()
         val length = flattenItems.firstOrNull { it.index == currentIndex }.getNewDecoratorLength()
-        return Pair(transactions, range.copy(start = range.start - length, end = range.end - length))
+        return Pair(transactions, TextRange(start = range.start - length, end = range.end - length))
     }
 
     private fun updateNestedListItems(
@@ -151,8 +150,8 @@ internal object ListItemTransaction {
         lines: MultiPieceParagraph,
         prevListItem: TextEditorDecoratorItem,
         currListItem: TextEditorDecoratorItem,
-        range: TextEditorRange
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+        range: TextRange
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         // Reducing levels
         return if (prevListItem == currListItem) {
             val positionalListItems = PositionalListItemUtils.decreaseLevels(lines, listOf(index))
@@ -184,10 +183,10 @@ internal object ListItemTransaction {
     private fun applyRangeChanges(
         lines: MultiPieceParagraph,
         prevListItem: TextEditorDecoratorItem,
-        range: TextEditorRange,
+        range: TextRange,
         listItem: TextEditorDecoratorItem,
         onListItemChanged: (() -> Unit)? = null
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         val filteredParagraphs = lines.paragraphsInSelectedRange.filter { it.findPiecesInRange(range.start, range.end).isNotEmpty() }
         return when (filteredParagraphs.all { it.isListItem }) {
             true -> {
@@ -216,8 +215,8 @@ internal object ListItemTransaction {
         lines: MultiPieceParagraph,
         prevListItem: TextEditorDecoratorItem,
         listItem: TextEditorDecoratorItem,
-        range: TextEditorRange
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+        range: TextRange
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         val selectedParagraphs = lines.paragraphsInSelectedRange.filter { it.findPiecesInRange(range.start, range.end).isNotEmpty() }
         val currentItem = selectedParagraphs.first()
         val currentListItem = listItem.toFinalListItemType(prevListItem, currentItem.startPiece.decorator.toLevel(0))
@@ -243,9 +242,9 @@ internal object ListItemTransaction {
         lines: MultiPieceParagraph,
         prevListItem: TextEditorDecoratorItem,
         listItem: TextEditorDecoratorItem,
-        range: TextEditorRange,
+        range: TextRange,
         onListItemChanged: (() -> Unit)? = null
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         // We need to change the type of all items in the selection using the currentListItem type
         val selectedParagraphs = lines.paragraphsInSelectedRange.filter { it.findPiecesInRange(range.start, range.end).isNotEmpty() }
         val currentItem = selectedParagraphs.first()
@@ -283,8 +282,8 @@ internal object ListItemTransaction {
     private fun applyChangesToMultipleParagraphs(
         lines: MultiPieceParagraph,
         listItem: TextEditorDecoratorItem,
-        range: TextEditorRange
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+        range: TextRange
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         val selectedParagraphs = lines.paragraphsInSelectedRange.filter { it.findPiecesInRange(range.start, range.end).isNotEmpty() }.toSet()
         val updatedLines = lines.copy(
             paragraphs = lines.paragraphs.map { if (it in selectedParagraphs) it.addDecoratorIfNull(listItem) else it }
@@ -299,8 +298,8 @@ internal object ListItemTransaction {
     private fun applyMultipleParagraphsLevels(
         lines: MultiPieceParagraph,
         listItem: TextEditorDecoratorItem,
-        range: TextEditorRange
-    ): Pair<List<TextEditorListItemTransaction>, TextEditorRange> {
+        range: TextRange
+    ): Pair<List<TextEditorListItemTransaction>, TextRange> {
         val positionalListItems = ListsConverter.convertToLocalListItems(lines)
 
         // Cache once — selectedParagraphIndices is a computed getter (O(P)) accessed 6 times originally.

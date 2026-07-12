@@ -1,60 +1,89 @@
 package com.jjrodcast.textkit.editor.core.transactions.marks
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.marks.processors.TextEditorMarkProcessor
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.isLineBreak
 
 /**
  * This object handles the logic to format changes which are applied to the piece table.
- *
- * The format changes comes from the [com.plangrid.pgfoundation.texteditor.components.format.TextEditorFormatComponent] component.
- */
+ **/
 internal object FormatTransaction {
 
     internal fun updateDocument(
         transaction: TextEditorTransaction,
         prevFormatMarks: Set<Mark>,
         currFormatMarks: Set<Mark>,
-        range: TextEditorRange,
+        range: TextRange,
+        configuration: TextKitConfiguration,
         transactionType: TextEditorTransactionType
-    ) = modifyMarks(transaction, prevFormatMarks, currFormatMarks, range, transactionType)
+    ) = modifyMarks(
+        transaction,
+        prevFormatMarks,
+        currFormatMarks,
+        range,
+        configuration,
+        transactionType
+    )
 
     private fun modifyMarks(
         transaction: TextEditorTransaction,
         prevFormatMarks: Set<Mark>,
         currFormatMarks: Set<Mark>,
-        range: TextEditorRange,
+        range: TextRange,
+        configuration: TextKitConfiguration,
         transactionType: TextEditorTransactionType
-    ): Pair<Boolean, TextEditorRange> {
+    ): Pair<Boolean, TextRange> {
         val start = range.min
         val end = range.max
         val root = transaction.getLineContentModels(start - 1, end + 1)
-        val rootIndex = root.indexOfFirst { model -> model.pieceStart <= start && end <= model.pieceEnd }
+        val rootIndex =
+            root.indexOfFirst { model -> model.pieceStart <= start && end <= model.pieceEnd }
 
         val hasChanges = when (rootIndex) {
             -1 -> {
-                MultiPieceFormatTransaction.modifyPieces(transaction, root, prevFormatMarks, currFormatMarks, range, transactionType)
+                MultiPieceFormatTransaction.modifyPieces(
+                    transaction,
+                    root,
+                    prevFormatMarks,
+                    currFormatMarks,
+                    range,
+                    configuration,
+                    transactionType
+                )
             }
 
             else -> {
                 val newRange = range.getNewRange(root[rootIndex], transactionType)
-                val marks = TextEditorMarkProcessor.process(root[rootIndex].piece.marks, prevFormatMarks, currFormatMarks)
+                val marks = TextEditorMarkProcessor.process(
+                    root[rootIndex].piece.marks,
+                    prevFormatMarks,
+                    currFormatMarks,
+                    configuration
+                )
                 modifyPiece(transaction, root, rootIndex, marks, newRange)
             }
         }
         return Pair(hasChanges, range)
     }
 
-    private fun TextEditorRange.getNewRange(item: TextEditorModel, transactionType: TextEditorTransactionType): TextEditorRange {
+    private fun TextRange.getNewRange(
+        item: TextEditorModel,
+        transactionType: TextEditorTransactionType
+    ): TextRange {
         return when (transactionType) {
             TextEditorTransactionType.Format -> this
+            is TextEditorTransactionType.Color -> this
             is TextEditorTransactionType.Link -> {
-                if (item.piece.marks.any { it is LinkMark }) TextEditorRange(item.pieceStart, item.pieceEnd) else this
+                if (item.piece.marks.any { it is LinkMark }) TextRange(
+                    item.pieceStart,
+                    item.pieceEnd
+                ) else this
             }
         }
     }
@@ -64,7 +93,7 @@ internal object FormatTransaction {
         root: List<TextEditorModel>,
         rootIndex: Int,
         currFormatMarks: Set<Mark>,
-        range: TextEditorRange
+        range: TextRange
     ): Boolean {
         val text = root[rootIndex].text
         val isDecorator = root[rootIndex].isDecorator
@@ -82,7 +111,7 @@ internal object FormatTransaction {
         transaction: TextEditorTransaction,
         element: TextEditorModel,
         marks: Set<Mark>,
-        range: TextEditorRange
+        range: TextRange
     ) = transaction.updateMarks(null, element, null, range.min, range.length, marks)
 
     private fun modifyPieceWithOneNeighbor(
@@ -90,7 +119,7 @@ internal object FormatTransaction {
         elements: List<TextEditorModel>,
         rootIndex: Int,
         marks: Set<Mark>,
-        range: TextEditorRange
+        range: TextRange
     ): Boolean {
         val sideIndex = elements.size - rootIndex - 1
         val sideItem = elements[sideIndex]
@@ -110,7 +139,14 @@ internal object FormatTransaction {
 
             else -> {
                 if (hasSameMarks) {
-                    transaction.updateMarks(null, rootItem, sideItem, range.min, range.length, marks)
+                    transaction.updateMarks(
+                        null,
+                        rootItem,
+                        sideItem,
+                        range.min,
+                        range.length,
+                        marks
+                    )
                 } else {
                     transaction.updateMarks(null, rootItem, null, range.min, range.length, marks)
                 }
@@ -122,7 +158,7 @@ internal object FormatTransaction {
         transaction: TextEditorTransaction,
         elements: List<TextEditorModel>,
         formatMarks: Set<Mark>,
-        range: TextEditorRange
+        range: TextRange
     ): Boolean {
         val start = range.min
         val end = range.max

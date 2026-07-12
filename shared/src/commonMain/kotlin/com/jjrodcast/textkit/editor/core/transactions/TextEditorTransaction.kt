@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.transactions
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.core.converters.PieceTableConverter
 import com.jjrodcast.textkit.editor.core.converters.TextEditorConverter
@@ -19,13 +20,14 @@ import com.jjrodcast.textkit.editor.core.transactions.lists.ListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.marks.FormatTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorItem
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorParagraph
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.EMPTY_JSON
 import com.jjrodcast.textkit.editor.utils.endsWithLineBreak
 import com.jjrodcast.textkit.editor.utils.fastForEach
 
-internal class TextEditorTransaction : TextEditorInitTransaction {
+internal class TextEditorTransaction(private val configuration: TextKitConfiguration) :
+    TextEditorInitTransaction {
 
     internal val pieceTable: RichTextEditorBasePieceTable by lazy { RichTextEditorPieceTable() }
     internal var isViewer: Boolean = false
@@ -39,15 +41,22 @@ internal class TextEditorTransaction : TextEditorInitTransaction {
             else TEXT_EDITOR_JSON.encodeToString(TextEditorDocument.serializer(), document)
         }
 
-    override fun loadWith(initialJson: String, isViewer: Boolean) {
+    override fun loadWith(
+        initialJson: String,
+        isViewer: Boolean
+    ) {
         this.isViewer = isViewer
-        val textEditorDocument = TEXT_EDITOR_JSON.decodeFromString(TextEditorDocument.serializer(), initialJson)
+        val textEditorDocument =
+            TEXT_EDITOR_JSON.decodeFromString(TextEditorDocument.serializer(), initialJson)
         val filteredContent = if (this.isViewer) {
             textEditorDocument.content
         } else {
             textEditorDocument.content.filter { it.type != BlockquoteType.Blockquote }
         }
-        val document = TextEditorConverter.getAsTextWithMarks(TextEditorDocument(filteredContent))
+        val document = TextEditorConverter.getAsTextWithMarks(
+            TextEditorDocument(filteredContent),
+            configuration
+        )
         pieceTable.build(document)
     }
 
@@ -73,7 +82,14 @@ internal class TextEditorTransaction : TextEditorInitTransaction {
         length: Int,
         marks: Set<Mark>
     ): RichPieceTransaction {
-        return pieceTable.getTransactionMarks(leftModel, centralModel, rightModel, offset, length, marks)
+        return pieceTable.getTransactionMarks(
+            leftModel,
+            centralModel,
+            rightModel,
+            offset,
+            length,
+            marks
+        )
     }
 
     override fun updateMarks(
@@ -84,33 +100,43 @@ internal class TextEditorTransaction : TextEditorInitTransaction {
         length: Int,
         marks: Set<Mark>
     ): Boolean {
-        val transaction = getTransactionMarks(leftModel, centralModel, rightModel, offset, length, marks)
+        val transaction =
+            getTransactionMarks(leftModel, centralModel, rightModel, offset, length, marks)
         return pieceTable.updateMarks(transaction)
     }
 
-    override fun upsertMarks(transactions: List<RichPieceTransaction>) = pieceTable.updateMarks(transactions)
+    override fun upsertMarks(transactions: List<RichPieceTransaction>) =
+        pieceTable.updateMarks(transactions)
 
-    override fun getLink(start: Int, end: Int): Pair<String?, TextEditorRange> {
-        val result = pieceTable.getLineContent(start, end).getMarksWithType()
+    override fun getLink(
+        start: Int,
+        end: Int,
+        configuration: TextKitConfiguration
+    ): Pair<String?, TextRange> {
+        val result = pieceTable.getLineContent(start, end).getMarksWithType(configuration)
         return when {
             result.hasLink -> {
                 val link = result.marks.filterIsInstance<LinkMark>().first().attrs.href
                 link to result.range
             }
 
-            else -> null to TextEditorRange(start, end)
+            else -> null to TextRange(start, end)
         }
     }
 
-    override fun getMarksWithType(start: Int, end: Int): MarkSearchType {
-        return pieceTable.getLineContent(start, end).getMarksWithType()
+    override fun getMarksWithType(
+        start: Int,
+        end: Int,
+        configuration: TextKitConfiguration
+    ): MarkSearchType {
+        return pieceTable.getLineContent(start, end).getMarksWithType(configuration)
     }
 
-    override fun containsDecorator(start: Int, end: Int): Pair<Boolean, TextEditorRange> {
+    override fun containsDecorator(start: Int, end: Int): Pair<Boolean, TextRange> {
         val textLength = text.length
 
         if (start > textLength || end > textLength) {
-            return Pair(false, TextEditorRange.Zero)
+            return Pair(false, TextRange.Zero)
         }
 
         val result = pieceTable.getLineContent(start, end).getAllModelsInRange()
@@ -120,11 +146,14 @@ internal class TextEditorTransaction : TextEditorInitTransaction {
         return when (result.size) {
             1 -> {
                 val model = result.first()
-                val range = TextEditorRange(model.offsetInDocument, model.offsetInDocument + model.piece.length)
+                val range = TextRange(
+                    model.offsetInDocument,
+                    model.offsetInDocument + model.piece.length
+                )
                 Pair(true, range)
             }
 
-            else -> Pair(result.isNotEmpty(), TextEditorRange.Zero)
+            else -> Pair(result.isNotEmpty(), TextRange.Zero)
         }
     }
 
@@ -147,18 +176,20 @@ internal class TextEditorTransaction : TextEditorInitTransaction {
         return paragraphs
     }
 
-    internal fun getLineContentModels(start: Int, end: Int) = getLineContent(start, end).getAllModelsInRange()
+    internal fun getLineContentModels(start: Int, end: Int) =
+        getLineContent(start, end).getAllModelsInRange()
 
     internal fun getLineContent(start: Int, end: Int) = pieceTable.getLineContent(start, end)
 
-    internal fun getLineContentWithNeigborParagraphs(start: Int, end: Int) = pieceTable.getLineContentWithNeighborListItems(start, end)
+    internal fun getLineContentWithNeigborParagraphs(start: Int, end: Int) =
+        pieceTable.getLineContentWithNeighborListItems(start, end)
 
     override fun updateDocument(
         prevMarks: Set<Mark>,
         currMarks: Set<Mark>,
         prevListItem: TextEditorDecoratorItem,
         currListItem: TextEditorDecoratorItem,
-        range: TextEditorRange,
+        range: TextRange,
         transactionType: TextEditorTransactionType
     ) = when {
         prevListItem != currListItem -> {
@@ -167,16 +198,26 @@ internal class TextEditorTransaction : TextEditorInitTransaction {
 
         else -> {
             if (range.collapsed && transactionType == TextEditorTransactionType.Format) false to range
-            else FormatTransaction.updateDocument(this, prevMarks, currMarks, range, transactionType)
+            else FormatTransaction.updateDocument(
+                this,
+                prevMarks,
+                currMarks,
+                range,
+                configuration,
+                transactionType
+            )
         }
     }
 
     override fun getTextAt(offset: Int) = pieceTable.getTextAt(offset)
 
-    override fun getTextInRange(start: Int, end: Int) = pieceTable.getLineContent(start, end).getAllModelsInRange()
+    override fun getTextInRange(start: Int, end: Int) =
+        pieceTable.getLineContent(start, end).getAllModelsInRange()
 
     override fun onDecoratorChange(offset: Int): Boolean {
-        val selectedModel = pieceTable.getLineContent(offset, offset + 1).getAllModelsInRange().firstOrNull() ?: return false
+        val selectedModel =
+            pieceTable.getLineContent(offset, offset + 1).getAllModelsInRange().firstOrNull()
+                ?: return false
         return pieceTable.updateDecorator(selectedModel)
     }
 

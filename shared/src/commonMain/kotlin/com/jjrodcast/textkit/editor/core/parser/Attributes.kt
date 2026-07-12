@@ -15,10 +15,9 @@ data class ListAttrs(val start: Int = 1)
 data class HeadingAttrs(val level: Int = HeadingLevels.H4)
 
 @Serializable
-data class TextStyleAttrs(val color: String? = "", val fontSize: Int = getDefaultFontSize()) {
+data class TextStyleAttrs(val color: String? = "", val fontSize: Int) {
 
     companion object {
-        fun getDefaultFontSize() = 14
     }
 }
 

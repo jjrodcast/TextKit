@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
 import com.jjrodcast.textkit.editor.core.converters.utils.PositionalListItemUtils
 import com.jjrodcast.textkit.editor.core.converters.utils.createTransactions
@@ -10,7 +11,6 @@ import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toLevel
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.utils.LINE_BREAK
 
 internal object TextTransactionsUtils {
@@ -123,7 +123,7 @@ internal object TextTransactionsUtils {
     internal fun getCommonDeleteDecoratorTransactions(
         paragraph: PieceParagraph,
         lines: MultiPieceParagraph
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val decoratorPiece = paragraph.startPiece
         val previousLineBreakLength = "$LINE_BREAK".length
         val selectedIndex = lines.selectedParagraphIndices.first()
@@ -137,7 +137,7 @@ internal object TextTransactionsUtils {
         val deleteLength = if (needToDeletePreviousLineBreak) decoratorPiece.length + previousLineBreakLength else decoratorPiece.length
 
         val deleteTransaction = deleteTransaction(offset, deleteLength)
-        val range = TextEditorRange(offset)
+        val range = TextRange(offset)
 
         val nextItemsTransactions = reorderListItemsOnUpdate(lines)
         val transactions = mutableListOf<TextEditorListItemTransaction>()

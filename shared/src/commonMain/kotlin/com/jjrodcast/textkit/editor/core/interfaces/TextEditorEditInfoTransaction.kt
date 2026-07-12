@@ -1,9 +1,9 @@
 package com.jjrodcast.textkit.editor.core.interfaces
 
+import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPieceTransaction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
 
 internal interface TextEditorEditInfoTransaction<Model> {
@@ -30,9 +30,9 @@ internal interface TextEditorEditInfoTransaction<Model> {
         currMarks: Set<Mark>,
         prevListItem: TextEditorDecoratorItem,
         currListItem: TextEditorDecoratorItem,
-        range: TextEditorRange,
+        range: TextRange,
         transactionType: TextEditorTransactionType
-    ): Pair<Boolean, TextEditorRange>
+    ): Pair<Boolean, TextRange>
 
     fun onDecoratorChange(offset: Int): Boolean
 }

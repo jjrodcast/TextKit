@@ -14,5 +14,9 @@ sealed class TextEditorTransactionType {
             get() = if (href.isNotEmpty()) setOf(LinkMark(LinkAttrs(href))) else emptySet()
     }
 
+    data class Color(val color: String?) : TextEditorTransactionType() {
+        override val marks: Set<Mark> = emptySet()
+    }
+
     abstract val marks: Set<Mark>
 }

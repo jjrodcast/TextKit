@@ -1,6 +1,7 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
-import com.jjrodcast.textkit.editor.core.TextEditorManager
+import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
 import com.jjrodcast.textkit.editor.core.converters.utils.PositionalListItemUtils
 import com.jjrodcast.textkit.editor.core.converters.utils.createTransactions
@@ -9,7 +10,6 @@ import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorRange
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransactionsUtils.getOffsetAfterDecorator
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransactionsUtils.reorderListItemsOnUpdate
 import com.jjrodcast.textkit.editor.utils.isLineBreak
@@ -27,8 +27,8 @@ internal object TextDeletedTransaction {
     internal fun deleteText(
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextRemoved,
-        manager: TextEditorManager
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+        manager: TextKitEditorManager
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val selectedParagraphs = lines.paragraphsInSelectedRange.filter { it.piecesInSelectedRange.isNotEmpty() }
         return if (selectedParagraphs.size > 1) {
             val firstParagraphInRange = selectedParagraphs.first()
@@ -57,7 +57,7 @@ internal object TextDeletedTransaction {
         lastParagraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val firstParagraphIncludesDecorator = firstParagraph.piecesInSelectedRange.first().piece.isDecorator
         val isLastDecoratorPartiallySelected =
             getOffsetAfterDecorator(lastParagraph, lastParagraph.piecesInSelectedRange.last().piece.offset) > 0
@@ -83,14 +83,14 @@ internal object TextDeletedTransaction {
         val nextParagraphsTransactions = reorderListItemsOnUpdate(lines)
         transactions.addAll(nextParagraphsTransactions)
 
-        return Pair(TextEditorRange(offset), transactions)
+        return Pair(TextRange(offset), transactions)
     }
 
     private fun TextEditorTransaction.deleteOnSingleParagraph(
         paragraph: PieceParagraph,
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val firstSelectedPiece = paragraph.piecesInSelectedRange.first()
         val isDecoratorSelected = firstSelectedPiece.piece.isDecorator
         val isParagraphEmpty = firstSelectedPiece.text.isLineBreak()
@@ -110,25 +110,25 @@ internal object TextDeletedTransaction {
         lines: MultiPieceParagraph,
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return TextDecoratorTransaction.getDeleteTransaction(paragraph, lines, actionModel)
     }
 
     private fun deleteTextAndDecorator(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return if (paragraph.piecesInSelectedRange.first().piece.isDecorator) {
             val remainingDecoratorOffset = getOffsetAfterDecorator(paragraph, actionModel.offset)
             val newOffset = actionModel.offset + remainingDecoratorOffset
             val newLength = actionModel.length - remainingDecoratorOffset
             val deleteTransaction = TextTransactionsUtils.deleteTransaction(newOffset, newLength)
-            val range = TextEditorRange(newOffset)
+            val range = TextRange(newOffset)
 
             Pair(range, listOf(deleteTransaction))
         } else {
             val deleteTransaction = TextTransactionsUtils.deleteTransaction(actionModel.offset, actionModel.length)
-            val range = TextEditorRange(actionModel.offset)
+            val range = TextRange(actionModel.offset)
 
             Pair(range, listOf(deleteTransaction))
         }
@@ -137,10 +137,10 @@ internal object TextDeletedTransaction {
     private fun TextEditorTransaction.deleteEmptyParagraph(
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextRemoved
-    ): Pair<TextEditorRange, List<TextEditorListItemTransaction>> {
+    ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val transactions = mutableListOf<TextEditorListItemTransaction>()
         val deleteTransaction = TextTransactionsUtils.deleteTransaction(actionModel.offset, actionModel.length)
-        val range = TextEditorRange(actionModel.offset)
+        val range = TextRange(actionModel.offset)
 
         // We are deleting empty paragraph, so we need to merge previous and next items in case we have list items.
         val updatedNextParagraphsTransactions = getMergeListsParagraphsTransactions(lines, actionModel)

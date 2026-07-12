@@ -4,6 +4,7 @@ import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
+import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 
 /**
  * This object is responsible for processing the marks of a text editor when selecting one or multiple pieces.
@@ -20,7 +21,8 @@ internal object TextEditorMarkProcessor {
     fun process(
         pieceMarks: Set<Mark>,
         prevFormatMarks: Set<Mark>,
-        currFormatMarks: Set<Mark>
+        currFormatMarks: Set<Mark>,
+        configuration: TextKitConfiguration
     ): Set<Mark> {
         // Single pass over pieceMarks — replaces 2× filterIsInstance + filterNot (3 traversals → 1).
         var pieceLinkMark: LinkMark? = null
@@ -56,7 +58,7 @@ internal object TextEditorMarkProcessor {
                 }
                 val fontSize = when (formatTextStyleMark?.attrs?.fontSize) {
                     null -> pieceTextStyleMark?.attrs?.fontSize
-                        ?: TextStyleAttrs.getDefaultFontSize()
+                        ?: configuration.fontSize
                     else -> formatTextStyleMark.attrs.fontSize
                 }
 
