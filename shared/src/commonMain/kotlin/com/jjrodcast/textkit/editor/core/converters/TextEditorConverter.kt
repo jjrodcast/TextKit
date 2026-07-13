@@ -20,6 +20,7 @@ import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
+import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
@@ -273,7 +274,7 @@ internal object TextEditorConverter {
     ): Set<Mark> {
         val styleMark = createTextStyleFromLevel(headingLevel, configuration)
         val (styleMarks, otherMarks) = marks.plus(styleMark).partition { it is TextStyleMark }
-        val newStyleMarks = convertRgbToHex(styleMarks.firstOrNull() as? TextStyleMark)
+        val newStyleMarks = resolveTextStyleDefaults(styleMarks.firstOrNull() as? TextStyleMark, configuration)
         return otherMarks.toSet().plus(newStyleMarks)
     }
 
@@ -302,9 +303,30 @@ internal object TextEditorConverter {
         return setOfNotNull(mark)
     }
 
-    private fun convertRgbToHex(textStyle: TextStyleMark?): Set<Mark> {
-        if (textStyle == null) return setOfNotNull(textStyle)
-        val color = RegexUtils.rgbTextToHex(textStyle.attrs.color)
-        return setOfNotNull(textStyle.copy(attrs = textStyle.attrs.copy(color = color)))
+    /**
+     * Normalizes a text-style mark coming from the document against the [configuration]:
+     *
+     * - When there is no text-style mark at all, none is added (a text node with e.g. only a
+     *   `bold` mark stays without a `textStyle`).
+     * - A missing / unset `fontSize` falls back to [TextKitConfiguration.fontSize].
+     * - A missing / empty `color` falls back to [TextKitConfiguration.textColor].
+     * - `rgb(...)` colors are converted to hex.
+     */
+    private fun resolveTextStyleDefaults(
+        textStyle: TextStyleMark?,
+        configuration: TextKitConfiguration
+    ): Set<Mark> {
+        if (textStyle == null) return emptySet()
+
+        val hexColor = RegexUtils.rgbTextToHex(textStyle.attrs.color)
+        val resolvedColor =
+            if (hexColor.isNullOrEmpty()) configuration.textColor.toHex() else hexColor
+        val resolvedFontSize =
+            if (textStyle.attrs.fontSize <= TextStyleAttrs.UNSET_FONT_SIZE) configuration.fontSize
+            else textStyle.attrs.fontSize
+
+        return setOf(
+            textStyle.copy(attrs = textStyle.attrs.copy(color = resolvedColor, fontSize = resolvedFontSize))
+        )
     }
 }

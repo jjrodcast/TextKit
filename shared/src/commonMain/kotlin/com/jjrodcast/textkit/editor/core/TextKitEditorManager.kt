@@ -9,6 +9,7 @@ import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransacti
 import com.jjrodcast.textkit.editor.models.MarkSearchType
 import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
+import com.jjrodcast.textkit.editor.utils.toHex
 
 class TextKitEditorManager(val configuration: TextKitConfiguration = createTextKitConfiguration()) {
 
@@ -62,14 +63,15 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
         val prevFormatMarks =
             transaction.getMarksWithType(selection.start, selection.end, configuration)
 
-        val formatMarks = if (color != null) {
-            val (prevMarks, prevTextStyle) = prevFormatMarks.marks.partition { it !is TextStyleMark }
-            val prevTextStyleMark = prevTextStyle.firstOrNull() as? TextStyleMark
-            val fontSize = prevTextStyleMark?.attrs?.fontSize ?: configuration.fontSize
-            prevMarks
-                .plus(TextStyleMark(TextStyleAttrs(color = color, fontSize = fontSize)))
-                .toSet()
-        } else prevFormatMarks.marks
+        // Keep the current font size and only change the color. Removing the color (color == null)
+        // falls back to the configured default color instead of dropping the text-style mark.
+        val (prevMarks, prevTextStyle) = prevFormatMarks.marks.partition { it !is TextStyleMark }
+        val prevTextStyleMark = prevTextStyle.firstOrNull() as? TextStyleMark
+        val fontSize = prevTextStyleMark?.attrs?.fontSize ?: configuration.fontSize
+        val resolvedColor = color ?: configuration.textColor.toHex()
+        val formatMarks = prevMarks
+            .plus(TextStyleMark(TextStyleAttrs(color = resolvedColor, fontSize = fontSize)))
+            .toSet()
 
         return transaction.updateDocument(
             prevMarks = prevFormatMarks.marks,
