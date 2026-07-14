@@ -41,6 +41,9 @@ fun TextKitSample() {
         Spacer(Modifier.size(6.dp))
         TextKitEditor(
             modifier = Modifier.padding(10.dp),
+            onUrlClicked = {
+                println("link: $it")
+            },
             state = state
         )
     }

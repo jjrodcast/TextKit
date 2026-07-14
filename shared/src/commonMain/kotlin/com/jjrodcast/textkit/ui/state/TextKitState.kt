@@ -19,6 +19,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
@@ -134,6 +135,13 @@ class TextKitState(
     val composition get() = textFieldValue.composition
 
     private var prevTextFieldValue = textFieldValue.copy(text = manager.text)
+
+    /**
+     * Range of the link currently under a collapsed caret, painted as a background highlight
+     * instead of a real text selection so it reads like a mobile highlight (no selection handles).
+     * Null when the caret is not inside a link.
+     */
+    private var linkSelectionRange by mutableStateOf<TextRange?>(null)
 
     private var annotatedString by mutableStateOf(AnnotatedString(text = ""))
 
@@ -263,11 +271,27 @@ class TextKitState(
     /**
      * Refreshes the stored caret context ([lastMarks] + [lastListItem]) from a single document
      * query so both stay in sync with the current selection.
+     *
+     * When the caret lands inside a link with a collapsed selection, the whole link is marked with
+     * a background highlight (see [linkSelectionRange]) rather than a real text selection, so it
+     * reads like a mobile highlight without the two selection handles + caret.
      */
     private fun readSelectionContext() {
         val searchType = getSelectedMarksWithType()
         lastMarks = searchType.marks
         lastListItem = searchType.listItem
+        updateLinkHighlight(searchType)
+    }
+
+    private fun updateLinkHighlight(searchType: MarkSearchType) {
+        val range = searchType.range.takeIf {
+            selection.collapsed && searchType.hasLink && !it.collapsed
+        }
+        if (range != linkSelectionRange) {
+            linkSelectionRange = range
+            // Rebuild so the background span is added/removed; keep the caret where it is.
+            updateAnnotatedString(textFieldValue)
+        }
     }
 
     private fun checkDecorator(start: Int, end: Int) {
@@ -320,10 +344,27 @@ class TextKitState(
     }
 
     private fun updateAnnotatedString(newTextFieldValue: TextFieldValue) {
-        annotatedString = defaultAnnotatedStringFormatting()
+        annotatedString = defaultAnnotatedStringFormatting().withLinkHighlight()
         textFieldValue = newTextFieldValue.copy(text = annotatedString.text)
         visualTransformation =
             VisualTransformation { _ -> TransformedText(annotatedString, OffsetMapping.Identity) }
+    }
+
+    /**
+     * Paints the active [linkSelectionRange] as a translucent background so a tapped link reads
+     * like a highlight (no selection handles). Returns the string unchanged when no link is active.
+     */
+    private fun AnnotatedString.withLinkHighlight(): AnnotatedString {
+        val range = linkSelectionRange ?: return this
+        if (range.min >= range.max || range.max > text.length) return this
+        return buildAnnotatedString {
+            append(this@withLinkHighlight)
+            addStyle(
+                SpanStyle(background = configuration.linkColor.copy(alpha = 0.20f)),
+                range.min,
+                range.max
+            )
+        }
     }
 
     private fun defaultAnnotatedStringFormatting(): AnnotatedString {
