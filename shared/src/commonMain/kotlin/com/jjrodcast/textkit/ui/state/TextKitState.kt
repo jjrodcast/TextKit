@@ -69,21 +69,17 @@ import com.jjrodcast.textkit.ui.utils.save
  * @param json The JSON string representing the initial state of the RichText component.
  * @param isViewer Whether the component is in read-only viewer mode.
  * @param configuration Configuration object that holds the colors and sizes for UI components.
- * @param onUrlClicked The callback invoked when the user taps a URL in viewer mode.
  */
 @Composable
 fun rememberTextKitState(
     json: String = "{}",
     isViewer: Boolean = false,
-    configuration: TextKitConfiguration = remember { createTextKitConfiguration() },
-    onUrlClicked: ((String) -> Unit)? = null
+    configuration: TextKitConfiguration = remember { createTextKitConfiguration() }
 ): TextKitState {
     val state = rememberSaveable(saver = TextKitState.Saver) {
         TextKitState(json, isViewer, configuration)
             .apply { setup() }
     }
-    // Callbacks are not parcelable; re-attach on each composition after save/restore.
-    state.onUrlClicked = onUrlClicked
     return state
 }
 
@@ -94,15 +90,15 @@ fun rememberTextKitState(
  * @param json The JSON string representing the initial state of the RichText component.
  * @param isViewer Whether the component is in read-only viewer mode.
  * @param configuration The object that manages the configuration of colors and sizes. See [TextKitConfiguration].
- * @param onUrlClicked The callback invoked when the user taps a URL in viewer mode.
  */
 @Stable
 class TextKitState(
     private val json: String,
     private val isViewer: Boolean,
-    private val configuration: TextKitConfiguration,
-    internal var onUrlClicked: ((String) -> Unit)? = null
+    private val configuration: TextKitConfiguration
 ) {
+
+    internal var onUrlClicked: ((url: String, range: TextRange) -> Unit)? = null
 
     private val manager by lazy { TextKitEditorManager(configuration) }
 
@@ -264,7 +260,7 @@ class TextKitState(
         return updated
     }
 
-    internal fun getSelectedMarksWithType(): MarkSearchType {
+    private fun getSelectedMarksWithType(): MarkSearchType {
         return manager.getSearchMarkType(selection)
     }
 
@@ -281,6 +277,7 @@ class TextKitState(
         lastMarks = searchType.marks
         lastListItem = searchType.listItem
         updateLinkHighlight(searchType)
+        notifyLinkAtSelection(searchType)
     }
 
     private fun updateLinkHighlight(searchType: MarkSearchType) {
@@ -291,6 +288,18 @@ class TextKitState(
             linkSelectionRange = range
             // Rebuild so the background span is added/removed; keep the caret where it is.
             updateAnnotatedString(textFieldValue)
+        }
+    }
+
+    /**
+     * Fires [onUrlClicked] with the link's URL and the manager-reported [MarkSearchType.range] when
+     * the caret / selection sits on a link. De-duped by range so it fires once per link entered,
+     * not on every selection change; resets when the selection leaves the link.
+     */
+    private fun notifyLinkAtSelection(searchType: MarkSearchType) {
+        val href = searchType.marks.filterIsInstance<LinkMark>().firstOrNull()?.attrs?.href
+        if (searchType.hasLink && !href.isNullOrEmpty()) {
+            onUrlClicked?.invoke(href, searchType.range)
         }
     }
 
@@ -429,7 +438,10 @@ class TextKitState(
                                         styles = TextLinkStyles(child.createStyle(manager.configuration)),
                                         linkInteractionListener = {
                                             val url = (it as LinkAnnotation.Url).url
-                                            onUrlClicked?.invoke(url)
+                                            onUrlClicked?.invoke(
+                                                url,
+                                                TextRange(child.start, child.end)
+                                            )
                                         }
                                     )
                                 ) {

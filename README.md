@@ -245,7 +245,9 @@ val state = rememberTextKitState(
     json = documentJson,
     isViewer = false,
     configuration = configuration,
-    onUrlClicked = { url -> /* open the link */ },
+    // Fired when a link is tapped (viewer) or the caret / selection lands on a link (editing).
+    // `range` is the link's TextRange as reported by the manager.
+    onUrlClicked = { url, range -> /* open the link / show link options */ },
 )
 ```
 

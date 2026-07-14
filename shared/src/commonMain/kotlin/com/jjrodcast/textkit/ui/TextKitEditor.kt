@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.input.pointer.pointerInput
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 import com.jjrodcast.textkit.ui.state.TextKitState
@@ -30,13 +32,17 @@ import textkit.shared.generated.resources.type_text
 @Composable
 fun TextKitEditor(
     modifier: Modifier = Modifier,
-    onUrlClicked: (String) -> Unit = {},
+    onUrlClicked: (url: String, range: TextRange) -> Unit = { _, _ -> },
     state: TextKitState = rememberTextKitState(
-        "{}", false, createTextKitConfiguration(), onUrlClicked
+        "{}", false, createTextKitConfiguration()
     )
 ) {
     val focusRequester = remember { FocusRequester() }
     var isHoveringLink by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        state.onUrlClicked = onUrlClicked
+    }
 
     BasicTextField(
         modifier = modifier
