@@ -156,6 +156,97 @@ val outJson: String = editor.toJson()
 
 > Selections are `androidx.compose.ui.text.TextRange` — offsets index into the plain-text stream returned by `text`.
 
+### Document format (ProseMirror-style JSON)
+
+`load(json, …)` expects a `type: "doc"` root whose `content` is a list of **block** nodes; blocks hold **inline** nodes (`text`, `hardBreak`), and inline text carries a set of **marks**. The document below exercises every supported node and mark type — headings (`level` 1–6), styled text (bold / italic / underline / strike / highlight, `link`, and `textStyle` with `color` + `fontSize`), a `hardBreak`, ordered / bullet / task lists, and a blockquote:
+
+```json
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 1 },
+      "content": [{ "type": "text", "text": "TextKit" }]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "Plain, " },
+        { "type": "text", "marks": [{ "type": "bold" }], "text": "bold" },
+        { "type": "text", "text": ", " },
+        { "type": "text", "marks": [{ "type": "italic" }], "text": "italic" },
+        { "type": "text", "text": ", " },
+        { "type": "text", "marks": [{ "type": "underline" }], "text": "underline" },
+        { "type": "text", "text": ", " },
+        { "type": "text", "marks": [{ "type": "strike" }], "text": "strike" },
+        { "type": "text", "text": ", " },
+        { "type": "text", "marks": [{ "type": "highlight" }], "text": "highlight" },
+        { "type": "text", "text": ", and a " },
+        {
+          "type": "text",
+          "marks": [{ "type": "link", "attrs": { "href": "https://github.com/jjrodcast/textkit", "target": "_blank" } }],
+          "text": "link"
+        },
+        { "type": "text", "text": "." },
+        { "type": "hardBreak" },
+        {
+          "type": "text",
+          "marks": [{ "type": "textStyle", "attrs": { "color": "#E53935", "fontSize": 18 } }],
+          "text": "Red 18sp text after a line break."
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": { "start": 1 },
+      "content": [
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "First" }] }] },
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Second" }] }] }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Bullet one" }] }] },
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Bullet two" }] }] }
+      ]
+    },
+    {
+      "type": "taskList",
+      "content": [
+        { "type": "taskItem", "attrs": { "checked": true },  "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Done" }] }] },
+        { "type": "taskItem", "attrs": { "checked": false }, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Todo" }] }] }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "A quoted paragraph." }] }]
+    }
+  ]
+}
+```
+
+Node / mark reference:
+
+| Kind | `type` | Notable `attrs` / fields |
+| --- | --- | --- |
+| Block | `paragraph` | — |
+| Block | `heading` | `level`: 1–6 (map to fixed font sizes) |
+| Block | `orderedList` | `start`: first number (default `1`); `content` is `listItem`s |
+| Block | `bulletList` | `content` is `listItem`s |
+| Block | `taskList` | `content` is `taskItem`s |
+| Block | `blockquote` | `content` is block nodes (kept only in `isViewer = true`) |
+| Item | `listItem` | `content` is block nodes (usually a `paragraph`) |
+| Item | `taskItem` | `attrs.checked`: `Boolean`; `content` is block nodes |
+| Inline | `text` | `text`: `String`; optional `marks` |
+| Inline | `hardBreak` | soft line break within a block |
+| Mark | `bold` / `italic` / `underline` / `strike` / `highlight` | — |
+| Mark | `link` | `attrs.href`: `String`, `attrs.target`: `String` |
+| Mark | `textStyle` | `attrs.color`: hex `String?`, `attrs.fontSize`: `Int` |
+
+> Unknown `type`s fall back to a `None` node/mark rather than failing to parse. Full, real-world fixtures (with nested lists, mixed colors, etc.) live in `editor/utils/DocumentUtils.kt` as `complexJsonV1`–`complexJsonV6` and `emptyDocument` — pass any of them straight to `load(...)`. Load an empty document with `"{}"`.
+
 ### API reference
 
 | Member | Description |
@@ -282,15 +373,26 @@ val state = rememberTextKitState(
 
 The nested `TextKitState.Saver` persists text, selection, configuration, JSON, and the viewer flag across configuration changes.
 
-### Example: apply marks from a formatting bar
+At the Compose layer you don't build `TextEditorSelectedMark`s by hand, and you don't call `updateDocument` — that method is **private** on `TextKitState`. Use the `apply…` / `toggle…` / link helpers instead; the mark toggles add the mark when `selected` is `true` and remove it when `false`, **preserving the other marks already active** at the selection/caret. When there is no selection, a mark toggle updates the *stored marks* (`lastMarks`) so the next typed characters inherit the formatting.
 
-At the Compose layer you don't build `TextEditorSelectedMark`s by hand, and you don't call `updateDocument` — that method is **private** on `TextKitState`. Use the `apply…` toggles instead; each one adds the mark when `selected` is `true` and removes it when `false`, **preserving the other marks already active** at the selection/caret. When there is no selection, the toggle updates the *stored marks* (`lastMarks`) so the next typed characters inherit the formatting.
+> Note: the public `updateDocument(...)` shown in [Using the engine directly](#using-the-engine-directly-textkiteditormanager) belongs to `TextKitEditorManager`, not `TextKitState`. Drop to the manager only when you are driving the engine without Compose.
 
-> Note: the public `updateDocument(...)` shown in [Using the engine directly](#using-the-engine-directly-textkiteditormanager) belongs to `TextKitEditorManager`, not `TextKitState`. Drop to the manager only when you need links/colors or are driving the engine without Compose.
+### Example: a full editor (toolbar + editor + link popup)
+
+This mirrors the sample in `sample/TextKitSample.kt`. `TextKitFormattingBar` needs a `selectedColor` (the highlight used behind an active toggle); the link button opens the popup via `applyLink()`, and `TextKitLinkPopup` is overlaid in the **same `Box`** as the editor so it shares its coordinate space and anchors next to the link.
 
 ```kotlin
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.ui.TextKitEditor
 import com.jjrodcast.textkit.ui.TextKitFormattingBar
+import com.jjrodcast.textkit.ui.TextKitLinkPopup
 import com.jjrodcast.textkit.ui.TextKitScreen
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
@@ -308,16 +410,71 @@ fun Editor(documentJson: String) {
     TextKitScreen {
         TextKitFormattingBar(
             barState = barState,
-            onBoldClick = { selected -> state.applyBold(selected) },
-            onItalicClick = { selected -> state.applyItalic(selected) },
-            onUnderlineClick = { selected -> state.applyUnderline(selected) },
-            onStrikeThroughClick = { selected -> state.applyStrikeThrough(selected) },
-            onHighlightClick = { selected -> state.applyHighlight(selected) },
+            selectedColor = Color.Yellow,
+            onBoldClick = state::applyBold,
+            onItalicClick = state::applyItalic,
+            onUnderlineClick = state::applyUnderline,
+            onStrikeThroughClick = state::applyStrikeThrough,
+            onHighlightClick = state::applyHighlight,
+            onLinkClick = { state.applyLink() },
+            onOrderedListClick = state::toggleOrderedList,
+            onBulletedListClick = state::toggleUnorderedList,
         )
-        TextKitEditor(state = state)
+        Spacer(Modifier.size(6.dp))
+        // The popup overlays the editor (same Box) so it shares coordinates and stays in bounds.
+        Box {
+            TextKitEditor(
+                state = state,
+                modifier = Modifier.padding(10.dp),
+                onUrlClicked = { url, text, range -> /* open the link / analytics … */ },
+            )
+            TextKitLinkPopup(
+                state = state,
+                onEdit = { link -> state.updateLinkText(newText = link.text, url = link.url, range = link.range) },
+                onRemove = { link -> state.removeLink(link.range) },
+            )
+        }
     }
 }
 ```
+
+### Example: links (add / edit / remove) with the popup
+
+`TextKitLinkPopup` renders only while `state.activeLink != null`. It opens two ways:
+
+- **Automatically** when the caret rests (collapsed) on an existing link — a selection *spanning* a link does not open it.
+- **On demand** via `state.applyLink()` (wire it to the formatting bar's link button). With a selection it targets that text; with a collapsed caret it targets the word under it.
+
+The popup shows the link **text** and **URL** (both editable) plus **Edit** and **Remove**. Route its callbacks back into the state:
+
+```kotlin
+TextKitLinkPopup(
+    state = state,
+    // Edit commits the (possibly changed) text + URL and leaves a collapsed caret at the end.
+    onEdit = { link -> state.updateLinkText(newText = link.text, url = link.url, range = link.range) },
+    onRemove = { link -> state.removeLink(link.range) },
+    // onClose defaults to state.dismissLinkPopup().
+)
+```
+
+`TextKitLinkInfo` is the snapshot passed to those callbacks:
+
+```kotlin
+data class TextKitLinkInfo(val text: String, val url: String, val range: TextRange)
+```
+
+After any of add / edit / remove, the caret is collapsed at the end of the affected text and the popup closes — no lingering selection or handles.
+
+### Example: lists
+
+```kotlin
+// selected = true converts the paragraph(s) the selection touches to a list; false removes it.
+state.toggleOrderedList(selected = true)     // 1. 2. 3. …
+state.toggleUnorderedList(selected = true)   // • • •
+state.toggleUnorderedList(selected = false)  // back to a plain paragraph
+```
+
+Calling `toggleOrderedList(true)` while the paragraph is a bulleted list switches it to numbered in place (and vice-versa). Both work with a collapsed caret, acting on the caret's paragraph.
 
 ### Example: change color / font size
 
@@ -327,8 +484,6 @@ state.applyTextStyle(fontSize = 18, color = "#E53935")
 state.applyTextStyle(fontSize = 18, color = null)
 ```
 
-> Under the hood every `apply…` call routes to the manager's `updateDocument(...)` with a `Format` transaction (see [Using the engine directly](#using-the-engine-directly-textkiteditormanager)). Reach for the manager API directly only when you need links/colors or when driving the engine without Compose.
-
 ---
 
 ## Notes
@@ -336,4 +491,5 @@ state.applyTextStyle(fontSize = 18, color = null)
 - Offsets are indices into the plain-text stream returned by `text`; keep your UI selection in the same `TextRange` coordinate space.
 - `getParagraphs()` / `TextEditorItem` expose `start`/`end` offsets and marks/decorator for custom rendering.
 - Links render as plain styled spans in the editable field; `TextKitEditor` hit-tests the pointer against the stored `TextLayoutResult` to show a hand cursor while hovering a link. In viewer mode, `annotatedStringForViewer` uses real `LinkAnnotation`s (hand cursor and click handling come for free).
+- `TextKitLinkPopup` is anchored via `linkBoundingBox(range)`, so it must live in the **same `Box` as `TextKitEditor`** (shared coordinate space). Its `Card` outline includes the rounded pointer as part of one shape — so the background, border and elevation shadow all follow the beak — and it flips above the link when there is no room below. While open it is "pinned" to the link's range, so focusing its own text fields (which makes the editor re-report its selection) does not dismiss it.
 - The platform entry points (`androidApp`, `desktopApp`, `webApp`, `iosApp`) wire `TextKitEditor` + `TextKitFormattingBar` to a `TextKitState` — see `MainActivity` / `main.kt` for a full sample.
