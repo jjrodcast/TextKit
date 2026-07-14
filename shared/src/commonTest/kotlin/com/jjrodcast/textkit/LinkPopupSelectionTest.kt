@@ -6,6 +6,7 @@ import com.jjrodcast.textkit.ui.state.TextKitState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class LinkPopupSelectionTest {
 
@@ -41,6 +42,33 @@ class LinkPopupSelectionTest {
         assertNotNull(link, "collapsed caret inside a word should open the editor for that word")
         assertEquals("Hello", link.text)
         assertEquals(TextRange(0, 5), link.range)
+    }
+
+    @Test
+    fun openLinkEditor_staysOpenWhenSelectionCollapsesWithinRange() {
+        val state = stateWith(SampleDocuments.SINGLE_PARAGRAPH)
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 11)))
+        state.openLinkEditorForSelection()
+        assertNotNull(state.activeLink)
+
+        // Editor loses focus to the popup's URL field → it reports a collapsed selection inside the
+        // range the popup was opened for. The popup must NOT close.
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(11)))
+
+        assertNotNull(state.activeLink, "popup should stay open while the caret is within its range")
+    }
+
+    @Test
+    fun openLinkEditor_closesWhenSelectionMovesOffRange() {
+        val state = stateWith(SampleDocuments.SINGLE_PARAGRAPH)
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 11)))
+        state.openLinkEditorForSelection()
+        assertNotNull(state.activeLink)
+
+        // Caret genuinely moves off the opened range → the popup dismisses.
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(2)))
+
+        assertNull(state.activeLink)
     }
 
     @Test

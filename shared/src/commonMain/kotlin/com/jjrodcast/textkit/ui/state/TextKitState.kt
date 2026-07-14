@@ -148,6 +148,14 @@ class TextKitState(
      */
     private var linkSelectionRange by mutableStateOf<TextRange?>(null)
 
+    /**
+     * Range the link popup is currently anchored to, or null when no popup is showing. While it is
+     * set, a selection change that stays within this range keeps the popup open — this is what lets
+     * the popup survive the editor collapsing / re-reporting its selection when focus moves to the
+     * popup's own text fields. Moving the caret off the range dismisses it.
+     */
+    private var pinnedLinkRange: TextRange? = null
+
     private var annotatedString by mutableStateOf(AnnotatedString(text = ""))
 
     private val viewerAnnotatedStringState = derivedStateOf {
@@ -411,11 +419,11 @@ class TextKitState(
         }
         if (min >= max) return
         val (href, _) = manager.getLink(min, max)
-        activeLink = TextKitLinkInfo(
-            text = text.substring(min, max),
-            url = href.orEmpty(),
-            range = TextRange(min, max),
-        )
+        val range = TextRange(min, max)
+        activeLink = TextKitLinkInfo(text = text.substring(min, max), url = href.orEmpty(), range = range)
+        // Pin so focusing the popup's fields (which makes the editor re-report its selection) does
+        // not immediately dismiss it — there is no real link here yet to keep it open otherwise.
+        pinnedLinkRange = range
     }
 
     /**
@@ -472,15 +480,24 @@ class TextKitState(
         val href = searchType.marks.filterIsInstance<LinkMark>().firstOrNull()?.attrs?.href
         if (searchType.hasLink && !href.isNullOrEmpty()) {
             activeLink = TextKitLinkInfo(searchType.text, href, searchType.range)
+            pinnedLinkRange = searchType.range
             onUrlClicked?.invoke(href, searchType.text, searchType.range)
-        } else {
-            activeLink = null
+            return
         }
+        // No link at the caret. Keep an open popup alive while the selection is still within the
+        // range it was opened for: focusing the popup's text fields makes the editor re-report a
+        // (usually collapsed) selection, which must not dismiss the popup. Only close once the caret
+        // actually moves off that range.
+        val pinned = pinnedLinkRange
+        if (pinned != null && selection.min >= pinned.min && selection.max <= pinned.max) return
+        activeLink = null
+        pinnedLinkRange = null
     }
 
     /** Hides the link popup (clears [activeLink]) until the selection next lands on a link. */
     fun dismissLinkPopup() {
         activeLink = null
+        pinnedLinkRange = null
     }
 
     /**
