@@ -177,7 +177,7 @@ object SampleDocuments {
         {"type":"doc","content":[
           {"type":"paragraph","content":[
             {"type":"text","text":"visit "},
-            {"type":"text","marks":[{"type":"link","attrs":{"href":"https://autodesk.com","target":"_blank"}}],"text":"autodesk"},
+            {"type":"text","marks":[{"type":"link","attrs":{"href":"https://test.com","target":"_blank"}}],"text":"test"},
             {"type":"text","text":" now"}
           ]}
         ]}

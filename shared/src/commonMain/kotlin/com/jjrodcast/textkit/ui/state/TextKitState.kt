@@ -329,19 +329,24 @@ class TextKitState(
     /**
      * Adds or updates a link with [url] over [range] (e.g. the range from [activeLink]). Passing an
      * empty [url] removes the link, keeping any other marks (bold, italic, …) on that range.
-     * Returns whether the document changed.
+     * Returns whether the document changed. On success the caret is collapsed at the end of [range]
+     * and the popup is closed (see [finishLinkEditAt]), so no selection or handles linger.
      *
      * `prev` and `curr` both carry a single [LinkMark] on purpose: the mark processor only takes
      * its "replace/remove link" branch when the two sets have the same size. With an empty `prev`
      * it would instead take the "add" branch, which re-adds the existing link and never removes it.
      */
     fun updateLink(url: String, range: TextRange): Boolean {
-        return updateDocument(
+        val updated = updateDocument(
             range,
             TextEditorSelectedMark(marks = setOf(LinkMark(LinkAttrs("")))),
             TextEditorSelectedMark(marks = setOf(LinkMark(LinkAttrs(url)))),
             TextEditorTransactionType.Link(url),
         )
+        // Commit leaves a plain caret at the end of the affected text — no lingering selection or
+        // its handles — and closes the popup now that the edit is done.
+        if (updated) finishLinkEditAt(range.max)
+        return updated
     }
 
     /** Removes the link over [range] (e.g. the range from [activeLink]). */
@@ -387,14 +392,28 @@ class TextKitState(
             newEnd
         }
 
-        // (Re)apply the link over the resulting span so the (possibly edited) URL is the one stored.
-        updateLink(url = url, range = TextRange(range.min, end))
+        // (Re)apply the link over the resulting span. updateLink finalizes with a collapsed caret at
+        // the end of the span and closes the popup, so the edit ends without a lingering selection.
+        return updateLink(url = url, range = TextRange(range.min, end))
+    }
 
-        // Land the caret right after the link regardless of the length change.
-        selection = TextRange(end)
-        updateAnnotatedString(textFieldValue.copy(selection = TextRange(end)))
-        readSelectionContext()
-        return true
+    /**
+     * Finalizes a link add / update / remove: clears the popup and the link's background highlight
+     * and leaves a plain collapsed caret at [offset] (the end of the affected text). This is what
+     * keeps a committed edit from leaving a full-range selection (and its drag handles) behind.
+     */
+    private fun finishLinkEditAt(offset: Int) {
+        val caret = offset.coerceIn(0, textFieldValue.text.length)
+        linkSelectionRange = null
+        activeLink = null
+        pinnedLinkRange = null
+        selection = TextRange(caret)
+        updateAnnotatedString(textFieldValue.copy(selection = TextRange(caret)))
+        // Sync the formatting-bar context to the new caret WITHOUT going through
+        // readSelectionContext, which would re-open the popup and re-paint the link highlight.
+        val searchType = getSelectedMarksWithType()
+        lastMarks = searchType.marks
+        lastListItem = searchType.listItem
     }
 
     /**
@@ -472,22 +491,26 @@ class TextKitState(
     }
 
     /**
-     * Fires [onUrlClicked] with the link's URL and the manager-reported [MarkSearchType.range] when
-     * the caret / selection sits on a link. De-duped by range so it fires once per link entered,
-     * not on every selection change; resets when the selection leaves the link.
+     * Fires [onUrlClicked] when the caret / selection sits on a link and auto-opens the link popup —
+     * but only for a **collapsed** caret resting on the link. A selection spanning a link does not
+     * pop it up; adding a link to a selection goes through [openLinkEditorForSelection] (the
+     * formatting-bar action) instead. Leaving the link closes the popup.
      */
     private fun notifyLinkAtSelection(searchType: MarkSearchType) {
         val href = searchType.marks.filterIsInstance<LinkMark>().firstOrNull()?.attrs?.href
         if (searchType.hasLink && !href.isNullOrEmpty()) {
-            activeLink = TextKitLinkInfo(searchType.text, href, searchType.range)
-            pinnedLinkRange = searchType.range
             onUrlClicked?.invoke(href, searchType.text, searchType.range)
-            return
+            // Only a collapsed caret on the link opens it; a selection over the link must not.
+            if (selection.collapsed) {
+                activeLink = TextKitLinkInfo(searchType.text, href, searchType.range)
+                pinnedLinkRange = searchType.range
+                return
+            }
         }
-        // No link at the caret. Keep an open popup alive while the selection is still within the
-        // range it was opened for: focusing the popup's text fields makes the editor re-report a
-        // (usually collapsed) selection, which must not dismiss the popup. Only close once the caret
-        // actually moves off that range.
+        // Keep an open popup alive while the selection is still within the range it was opened for:
+        // focusing the popup's text fields makes the editor re-report a (usually collapsed)
+        // selection, which must not dismiss the popup. Only close once the caret actually moves off
+        // that range.
         val pinned = pinnedLinkRange
         if (pinned != null && selection.min >= pinned.min && selection.max <= pinned.max) return
         activeLink = null

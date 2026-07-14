@@ -81,11 +81,11 @@ class FormattingTest {
     @Test
     fun reads_back_a_link_and_its_range() {
         val editor = editorFrom(SampleDocuments.PARAGRAPH_WITH_LINK)
-        val linkRange = editor.rangeOf("autodesk")
+        val linkRange = editor.rangeOf("test")
 
         val (href, range) = editor.getLink(linkRange.start, linkRange.end)
 
-        assertEquals("https://autodesk.com", href)
+        assertEquals("https://test.com", href)
         assertEquals(linkRange, range)
     }
 

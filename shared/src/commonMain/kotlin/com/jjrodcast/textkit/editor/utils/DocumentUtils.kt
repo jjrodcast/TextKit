@@ -82,7 +82,7 @@ object DocumentUtils {
                     {
                       "type": "link",
                       "attrs": {
-                        "href": "http://www.autodesk.com",
+                        "href": "http://www.test.com",
                         "target": "_blank",
                         "class": null
                       }
@@ -2503,7 +2503,7 @@ object DocumentUtils {
                        "content":[
                           {
                              "type":"text",
-                             "text":"On 30 Jan 2025, at 13:20, Karin Zloof (Forma QA) <reply@acc-qa.autodesk.com> wrote:"
+                             "text":"On 30 Jan 2025, at 13:20, Kaf (Forma QA) <reply@acc-qa.xxx.com> wrote:"
                           }
                        ]
                     },
@@ -2804,7 +2804,7 @@ object DocumentUtils {
                        "content":[
                           {
                              "type":"text",
-                             "text":"Karin Zloof <"
+                             "text":"aaas bbb <"
                           },
                           {
                              "type":"text",
@@ -2812,14 +2812,14 @@ object DocumentUtils {
                                 {
                                    "type":"link",
                                    "attrs":{
-                                      "href":"mailto:karin.zloof@autodesk.com",
+                                      "href":"mailto:kn.zlof@test.com",
                                       "target":"_blank",
                                       "rel":"noopener noreferrer",
                                       "class":null
                                    }
                                 }
                              ],
-                             "text":"karin.zloof@autodesk.com"
+                             "text":"kn.zlof@test.com"
                           },
                           {
                              "type":"text",
@@ -2859,7 +2859,7 @@ object DocumentUtils {
                        "content":[
                           {
                              "type":"text",
-                             "text":"Karin Zloof <"
+                             "text":"aaas bbb <"
                           },
                           {
                              "type":"text",
@@ -2867,14 +2867,14 @@ object DocumentUtils {
                                 {
                                    "type":"link",
                                    "attrs":{
-                                      "href":"mailto:karin.zloof@autodesk.com",
+                                      "href":"mailto:karoof@test.com",
                                       "target":"_blank",
                                       "rel":"noopener noreferrer",
                                       "class":null
                                    }
                                 }
                              ],
-                             "text":"karin.zloof@autodesk.com"
+                             "text":"aaas.bbb@test.com"
                           },
                           {
                              "type":"text",
@@ -2886,18 +2886,18 @@ object DocumentUtils {
                                 {
                                    "type":"link",
                                    "attrs":{
-                                      "href":"mailto:karin.zloof@icloud.com",
+                                      "href":"mailto:aaas.bbb@icloud.com",
                                       "target":"_blank",
                                       "rel":"noopener noreferrer",
                                       "class":null
                                    }
                                 }
                              ],
-                             "text":"karin.zloof@icloud.com"
+                             "text":"aaas.bbb@icloud.com"
                           },
                           {
                              "type":"text",
-                             "text":" (non-member) , Jan Beheerder <"
+                             "text":"Ja Beer <"
                           },
                           {
                              "type":"text",
@@ -3155,7 +3155,7 @@ object DocumentUtils {
                                 {
                                    "type":"link",
                                    "attrs":{
-                                      "href":"mailto:acc.no-reply@autodesk.com",
+                                      "href":"mailto:acc.no-reply@test.com",
                                       "target":"_blank",
                                       "rel":"noopener noreferrer",
                                       "class":"text-primary text-decoration-none"
@@ -3216,7 +3216,7 @@ object DocumentUtils {
                           },
                           {
                              "type":"text",
-                             "text":"Copyright © 2025 Autodesk, Inc. All Rights Reserved."
+                             "text":"Copyright © 2025 test, Inc. All Rights Reserved."
                           }
                        ]
                     }
