@@ -37,7 +37,6 @@ fun TextKitSample() {
             onStrikeThroughClick = state::applyStrikeThrough,
             onHighlightClick = state::applyHighlight,
             onLinkClick = {
-                println("clicked")
                 state.openLinkEditorForSelection()
             },
             onOrderedListClick = {},
