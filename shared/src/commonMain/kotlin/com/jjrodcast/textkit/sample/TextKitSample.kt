@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.sample
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -11,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.utils.DocumentUtils
 import com.jjrodcast.textkit.ui.TextKitEditor
 import com.jjrodcast.textkit.ui.TextKitFormattingBar
+import com.jjrodcast.textkit.ui.TextKitLinkPopup
 import com.jjrodcast.textkit.ui.TextKitScreen
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
@@ -39,12 +41,20 @@ fun TextKitSample() {
             onBulletedListClick = {}
         )
         Spacer(Modifier.size(6.dp))
-        TextKitEditor(
-            modifier = Modifier.padding(10.dp),
-            onUrlClicked = { url, range ->
-
-            },
-            state = state
-        )
+        // Wrap the editor in a Box so the popup overlays it (shares its coordinate space) and
+        // positions itself next to the tapped link.
+        Box {
+            TextKitEditor(
+                state = state,
+                modifier = Modifier.padding(10.dp)
+            )
+            TextKitLinkPopup(
+                state = state,
+                onEdit = { link ->
+                    state.updateLink(url = link.url, range = link.range)
+                },
+                onRemove = { link -> state.removeLink(link.range) },
+            )
+        }
     }
 }

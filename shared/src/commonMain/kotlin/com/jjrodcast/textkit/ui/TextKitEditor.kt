@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,7 +34,7 @@ import textkit.shared.generated.resources.type_text
 @Composable
 fun TextKitEditor(
     modifier: Modifier = Modifier,
-    onUrlClicked: (url: String, range: TextRange) -> Unit = { _, _ -> },
+    onUrlClicked: (url: String, text: String, range: TextRange) -> Unit = { _, _, _ -> },
     state: TextKitState = rememberTextKitState(
         "{}", false, createTextKitConfiguration()
     )
@@ -79,6 +81,80 @@ fun TextKitEditor(
                 }
                 innerTextField()
             }
+        }
+    )
+}
+
+@Composable
+fun TextKitEditorOutlined(
+    modifier: Modifier = Modifier,
+    onUrlClicked: (url: String, text: String, range: TextRange) -> Unit = { _, _, _ -> },
+    state: TextKitState = rememberTextKitState(
+        "{}", false, createTextKitConfiguration()
+    )
+) {
+    val focusRequester = remember { FocusRequester() }
+    var isHoveringLink by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        state.onUrlClicked = onUrlClicked
+    }
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val enabled = true
+    val singleLine = false
+
+    BasicTextField(
+        modifier = modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+            .pointerInput(state) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val position = event.changes.firstOrNull()?.position
+                        isHoveringLink = when (event.type) {
+                            PointerEventType.Move, PointerEventType.Enter ->
+                                position != null && state.isLinkAtPosition(position)
+
+                            PointerEventType.Exit -> false
+                            else -> isHoveringLink
+                        }
+                    }
+                }
+            }
+            .pointerHoverIcon(
+                icon = if (isHoveringLink) PointerIcon.Hand else PointerIcon.Default,
+                overrideDescendants = isHoveringLink
+            ),
+        value = state.textFieldValue,
+        onValueChange = state::onTextFieldChange,
+        onTextLayout = state::onTextLayout,
+        visualTransformation = state.visualTransformation,
+        interactionSource = interactionSource,
+        enabled = enabled,
+        singleLine = singleLine,
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = state.textFieldValue.text,
+                innerTextField = innerTextField,
+                enabled = enabled,
+                singleLine = singleLine,
+                visualTransformation = state.visualTransformation,
+                interactionSource = interactionSource,
+                placeholder = {
+                    if (state.textFieldValue.text.isEmpty()) {
+                        Text(text = stringResource(Res.string.type_text))
+                    }
+                },
+                container = {
+                    OutlinedTextFieldDefaults.Container(
+                        enabled = enabled,
+                        isError = false,
+                        interactionSource = interactionSource,
+                    )
+                }
+            )
         }
     )
 }

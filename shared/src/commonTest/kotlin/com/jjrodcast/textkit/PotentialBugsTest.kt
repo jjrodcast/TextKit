@@ -2,9 +2,12 @@ package com.jjrodcast.textkit
 
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
+import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.utils.DocumentUtils
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -83,6 +86,33 @@ class PotentialBugsTest {
         assertTrue(
             once != twice,
             "if this fails, V6 serialization is now stable — move it into LargeDocumentTest.idempotentSamples"
+        )
+    }
+
+    /**
+     * BUG: Removing an existing link duplicates text / merges the linked piece with its neighbor.
+     *
+     * Removing only the `link` mark must not change the character stream nor the number of pieces:
+     * the linked word sits in its own paragraph in [DocumentUtils.complexJsonV2], so dropping its
+     * link leaves a plain piece with no same-paragraph neighbor to merge with.
+     */
+    @Test
+    fun removing_link_keeps_text_and_piece_count() {
+        val editor = editorFrom(DocumentUtils.complexJsonV2)
+        val range = editor.rangeOf("link")
+
+        val textBefore = editor.text
+        val piecesBefore = editor.pieceCount()
+        assertTrue(editor.marksAt(range).has<LinkMark>(), "precondition: range must be a link")
+
+        assertTrue(editor.setLink(range, ""), "removing the link should report a change")
+
+        assertFalse(editor.marksAt(range).has<LinkMark>(), "link mark should be gone")
+        assertEquals(textBefore, editor.text, "text must be identical after removing the link")
+        assertEquals(
+            piecesBefore,
+            editor.pieceCount(),
+            "piece count must be unchanged after removing the link"
         )
     }
 }

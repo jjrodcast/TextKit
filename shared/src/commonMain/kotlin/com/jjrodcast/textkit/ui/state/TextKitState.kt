@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
@@ -42,6 +43,7 @@ import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
 import com.jjrodcast.textkit.editor.core.parser.HighlightMark
 import com.jjrodcast.textkit.editor.core.parser.ItalicMark
+import com.jjrodcast.textkit.editor.core.parser.LinkAttrs
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
@@ -58,10 +60,10 @@ import com.jjrodcast.textkit.editor.core.transactions.text.TextTransaction
 import com.jjrodcast.textkit.editor.models.MarkSearchType
 import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
+import com.jjrodcast.textkit.ui.model.TextKitLinkInfo
 import com.jjrodcast.textkit.ui.utils.createStyle
 import com.jjrodcast.textkit.ui.utils.restore
 import com.jjrodcast.textkit.ui.utils.save
-
 
 /**
  * A state object that can be used to remember the state of a RichText component across recomposition.
@@ -98,7 +100,7 @@ class TextKitState(
     private val configuration: TextKitConfiguration
 ) {
 
-    internal var onUrlClicked: ((url: String, range: TextRange) -> Unit)? = null
+    internal var onUrlClicked: ((url: String, text: String, range: TextRange) -> Unit)? = null
 
     private val manager by lazy { TextKitEditorManager(configuration) }
 
@@ -126,6 +128,13 @@ class TextKitState(
         private set
 
     internal var textLayoutResult: TextLayoutResult? by mutableStateOf(null)
+        private set
+
+    /**
+     * Link currently under the caret / selection, or null. Observe this to show a link popup; it
+     * updates as the selection moves and is cleared by [dismissLinkPopup] or when leaving the link.
+     */
+    var activeLink by mutableStateOf<TextKitLinkInfo?>(null)
         private set
 
     val composition get() = textFieldValue.composition
@@ -203,6 +212,9 @@ class TextKitState(
             selected = true
         )
 
+    fun applyLink(href: String): Boolean =
+        applyMark(LinkMark(LinkAttrs(href = href)), selected = true)
+
     /**
      * Toggles a single [mark] on/off while keeping the other marks active at the caret
      * ([lastMarks]) intact, then applies the resulting full set.
@@ -260,6 +272,27 @@ class TextKitState(
         return updated
     }
 
+    /**
+     * Adds or updates a link with [url] over [range] (e.g. the range from [activeLink]). Passing an
+     * empty [url] removes the link, keeping any other marks (bold, italic, …) on that range.
+     * Returns whether the document changed.
+     *
+     * `prev` and `curr` both carry a single [LinkMark] on purpose: the mark processor only takes
+     * its "replace/remove link" branch when the two sets have the same size. With an empty `prev`
+     * it would instead take the "add" branch, which re-adds the existing link and never removes it.
+     */
+    fun updateLink(url: String, range: TextRange): Boolean {
+        return updateDocument(
+            range,
+            TextEditorSelectedMark(marks = setOf(LinkMark(LinkAttrs("")))),
+            TextEditorSelectedMark(marks = setOf(LinkMark(LinkAttrs(url)))),
+            TextEditorTransactionType.Link(url),
+        )
+    }
+
+    /** Removes the link over [range] (e.g. the range from [activeLink]). */
+    fun removeLink(range: TextRange): Boolean = updateLink(url = "", range = range)
+
     private fun getSelectedMarksWithType(): MarkSearchType {
         return manager.getSearchMarkType(selection)
     }
@@ -299,8 +332,31 @@ class TextKitState(
     private fun notifyLinkAtSelection(searchType: MarkSearchType) {
         val href = searchType.marks.filterIsInstance<LinkMark>().firstOrNull()?.attrs?.href
         if (searchType.hasLink && !href.isNullOrEmpty()) {
-            onUrlClicked?.invoke(href, searchType.range)
+            activeLink = TextKitLinkInfo(searchType.text, href, searchType.range)
+            onUrlClicked?.invoke(href, searchType.text, searchType.range)
+        } else {
+            activeLink = null
         }
+    }
+
+    /** Hides the link popup (clears [activeLink]) until the selection next lands on a link. */
+    fun dismissLinkPopup() {
+        activeLink = null
+    }
+
+    /**
+     * Bounding box of the link at [range] in the text field's local coordinates, or null if the
+     * layout is not available yet. Used to anchor the link popup next to the link. For a multi-line
+     * link it returns the first line's box.
+     */
+    fun linkBoundingBox(range: TextRange): Rect? {
+        val layout = textLayoutResult ?: return null
+        val length = layout.layoutInput.text.length
+        if (range.min !in 0..length || range.max !in 0..length || range.min >= range.max) return null
+        val start = layout.getBoundingBox(range.min)
+        val end = layout.getBoundingBox((range.max - 1).coerceAtLeast(range.min))
+        return if (start.top == end.top) Rect(start.left, start.top, end.right, end.bottom)
+        else start
     }
 
     private fun checkDecorator(start: Int, end: Int) {
@@ -440,6 +496,7 @@ class TextKitState(
                                             val url = (it as LinkAnnotation.Url).url
                                             onUrlClicked?.invoke(
                                                 url,
+                                                child.text,
                                                 TextRange(child.start, child.end)
                                             )
                                         }

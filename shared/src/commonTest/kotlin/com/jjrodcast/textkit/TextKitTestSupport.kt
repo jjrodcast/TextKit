@@ -120,6 +120,14 @@ internal fun TextKitEditorManager.setLink(range: TextRange, href: String): Boole
 internal fun TextKitEditorManager.marksAt(range: TextRange): Set<Mark> =
     getSearchMarkType(range).marks
 
+/**
+ * Number of pieces backing the document. `getParagraphs()` emits one item per piece (its children
+ * are built 1:1 from the piece-table's `annotatedText`), so summing them is an observable proxy for
+ * the piece count without reaching into internals.
+ */
+internal fun TextKitEditorManager.pieceCount(): Int =
+    getParagraphs().sumOf { it.children.size }
+
 internal inline fun <reified T : Mark> Set<Mark>.has(): Boolean = any { it is T }
 
 /** Offset of the first occurrence of [needle] in the current text stream, or -1. */

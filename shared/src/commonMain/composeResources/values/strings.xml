@@ -10,5 +10,10 @@
     <string name="bulleted_list_text">Bulleted list</string>
     <string name="text_color_text">Text color</string>
     <string name="type_text">Type...</string>
+    <string name="close_text">Close</string>
+    <string name="text_label">Text</string>
+    <string name="url_label">Url</string>
+    <string name="edit_label">Edit</string>
+    <string name="remove_label">Remove</string>
 
 </resources>
