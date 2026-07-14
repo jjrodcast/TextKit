@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.parser
 
+import com.jjrodcast.textkit.editor.components.TextEditorStyleItem
 import com.jjrodcast.textkit.editor.components.TextEditorStyleItem.Strikethrough
 import com.jjrodcast.textkit.editor.components.TextEditorStyleItem.TextStyle
 import com.jjrodcast.textkit.editor.core.parser.MarkTypes.Bold
@@ -27,10 +28,10 @@ sealed class Mark {
     abstract fun createKey(): String
 
     fun toTextEditorStyleItem() = when (this) {
-        is BoldMark -> Bold
-        is ItalicMark -> Italic
-        is HighlightMark -> Highlight
-        is UnderlineMark -> Underline
+        is BoldMark -> TextEditorStyleItem.Bold
+        is ItalicMark -> TextEditorStyleItem.Italic
+        is HighlightMark -> TextEditorStyleItem.Highlight
+        is UnderlineMark -> TextEditorStyleItem.Underline
         is StrikeMark -> Strikethrough
         is TextStyleMark -> TextStyle(fontSize = attrs.fontSize, color = attrs.color.orEmpty())
 

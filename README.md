@@ -2,13 +2,13 @@
 
 A **rope-backed piece-table rich-text editor engine** for Kotlin Multiplatform / Compose Multiplatform, targeting Android, iOS, Web (Wasm + JS), and Desktop (JVM).
 
-The engine lives in `shared/src/commonMain/kotlin/com/jjrodcast/textkit/editor/` and manages the document model, formatting, and (de)serialization. A thin Compose state layer in `shared/src/commonMain/kotlin/com/jjrodcast/textkit/ui/` (`RichTextState`) bridges the engine to a Compose `TextField`, but the engine itself stays UI-agnostic and can be driven directly.
+The engine lives in `shared/src/commonMain/kotlin/com/jjrodcast/textkit/editor/` and manages the document model, formatting, and (de)serialization. A thin Compose state layer in `shared/src/commonMain/kotlin/com/jjrodcast/textkit/ui/` (`TextKitState`) bridges the engine to a Compose `TextField`, but the engine itself stays UI-agnostic and can be driven directly.
 
 ---
 
 ## Overview
 
-The engine loads and saves a **ProseMirror-style JSON document** and exposes a small, stateful facade — `TextKitEditorManager` — to query and mutate the document. For Compose apps, `RichTextState` (created via `rememberRichTextState(...)`) wraps the manager with `TextFieldValue` binding, selection tracking, and viewer rendering.
+The engine loads and saves a **ProseMirror-style JSON document** and exposes a small, stateful facade — `TextKitEditorManager` — to query and mutate the document. For Compose apps, `TextKitState` (created via `rememberTextKitState(...)`) wraps the manager with `TextFieldValue` binding, selection tracking, and viewer rendering.
 
 Key characteristics:
 
@@ -16,7 +16,7 @@ Key characteristics:
 - **Rope index** — a balanced rope (`PieceRope` / `RopeNode`) is the single source of truth for the piece sequence, keeping lookups and mutations at **O(log P)** in the number of pieces.
 - **Rich formatting** — bold, italic, underline, strikethrough, highlight, links, and text style (color + font size), plus block structures: headings (h1–h6), ordered / bullet / task lists, and blockquotes.
 - **Incremental plain-text cache** — plain text is cached and patched in place rather than rebuilt on every edit.
-- **Compose integration** — `RichTextState` binds the engine to a `BasicTextField`, exposing `textFieldValue`, selection helpers, link info, and a ready-to-render `AnnotatedString` for viewer mode.
+- **Compose integration** — `TextKitState` binds the engine to a `BasicTextField`, exposing `textFieldValue`, selection helpers, link info, and a ready-to-render `AnnotatedString` for viewer mode.
 - **Configurable** — colors (highlight, link, text) and base font size are supplied via a `TextKitConfiguration`, built with a small DSL.
 - **Multiplatform** — pure `commonMain` logic, with a few `expect`/`actual` seams (`Platform.kt`, `utils/Constants.kt`, `transactions/text/TextDecoratorTransaction.kt`).
 
@@ -27,7 +27,7 @@ Key characteristics:
 The engine is organized in layers, from the public API down to raw storage. Everything below `TextKitEditorManager` is `internal`.
 
 ```
-RichTextState                         (ui/)                   ← Compose state holder (optional)
+TextKitState                         (ui/)                   ← Compose state holder (optional)
       │
       ▼
 TextKitEditorManager                  (editor/core/)          ← public facade
@@ -44,9 +44,9 @@ RichTextEditorPieceTable
 PieceRope  +  RopeNode                 (core/piecetable/rope/) ← balanced rope: piece sequence
 ```
 
-### 0. `ui/RichTextState` (Compose layer)
+### 0. `ui/TextKitState` (Compose layer)
 
-A `@Stable` state holder that wraps a `TextKitEditorManager` and adapts it to Compose. Created with the `rememberRichTextState(json, isViewer, configuration, onUrlClicked)` composable, it is `rememberSaveable`-backed (via a nested `Saver`) and exposes `textFieldValue`, `composition`, `linkInfo`, `annotatedStringForViewer`, and the editing entry points (`onTextFieldChange`, `updateSelection`, `updateDocument`, `onTextLayout`, `toJson`). Rendering helpers live in `ui/utils/` (`TextEditorStyles`, `Savers`).
+A `@Stable` state holder that wraps a `TextKitEditorManager` and adapts it to Compose. Created with the `rememberTextKitState(json, isViewer, configuration, onUrlClicked)` composable, it is `rememberSaveable`-backed (via a nested `Saver`) and exposes `textFieldValue`, `composition`, `lastMarks` / `lastListItem` (the caret's active formatting), `annotatedStringForViewer`, and the editing entry points — the `applyBold` / `applyItalic` / `applyUnderline` / `applyStrikeThrough` / `applyHighlight` / `applyTextStyle` mark toggles, plus `onTextFieldChange`, `onTextLayout`, and `toJson`. Rendering helpers live in `ui/utils/` (`TextEditorStyles`, `Savers`).
 
 ### 1. `core/TextKitEditorManager`
 
@@ -103,8 +103,8 @@ Colors and the base font size are carried by an immutable `TextKitConfiguration`
 ```kotlin
 data class TextKitConfiguration(
     val highlightColor: Color = Color.Yellow,
-    val linkColor: Color = Color(0x1B75D0),
-    val textColor: Color = Color(0x000000),
+    val linkColor: Color = Color(0xFF1B75D0),
+    val textColor: Color = Color(0xFF000000),
     val fontSize: Int = 14,
 )
 ```
@@ -232,16 +232,16 @@ editor.getParagraphs().forEach { paragraph ->
 
 ---
 
-## Using the Compose layer (`RichTextState`)
+## Using the Compose layer (`TextKitState`)
 
-For Compose apps, `RichTextState` wraps the manager and binds it to a `BasicTextField`. Create it with `rememberRichTextState(...)`:
+For Compose apps, `TextKitState` wraps the manager and binds it to a `BasicTextField`. Create it with `rememberTextKitState(...)`:
 
 ```kotlin
-import com.jjrodcast.textkit.ui.rememberRichTextState
+import com.jjrodcast.textkit.ui.rememberTextKitState
 
 val configuration = createTextKitConfiguration { /* … */ }
 
-val state = rememberRichTextState(
+val state = rememberTextKitState(
     json = documentJson,
     isViewer = false,
     configuration = configuration,
@@ -249,18 +249,66 @@ val state = rememberRichTextState(
 )
 ```
 
-`RichTextState` exposes:
+`TextKitState` exposes:
 
-- `textFieldValue` — the `TextFieldValue` to bind to a `BasicTextField`.
-- `onTextFieldChange(newValue, marks)` — feed edits back in (auto-detects insert / delete / replace).
-- `updateSelection(start, end)` and `composition` — selection helpers.
-- `updateDocument(selection, previousMarks, currentMarks, transactionType)` — apply formatting.
-- `linkInfo` — the link (`Pair<String?, TextRange>`) at the current selection.
-- `onTextLayout(result)` — forward the `TextLayoutResult` from the text field.
-- `annotatedStringForViewer` — a pre-built `AnnotatedString` (+ inline task-checkbox content) for viewer/read-only rendering.
-- `toJson()` — serialize the current document.
+| Member | Description |
+| --- | --- |
+| `textFieldValue` | The `TextFieldValue` to bind to a `BasicTextField`. |
+| `onTextFieldChange(newValue)` | Feed edits back in (auto-detects insert / delete / replace, and applies `lastMarks` to typed text). |
+| `onTextLayout(result)` | Forward the `TextLayoutResult` from the text field (needed for caret/link hit-testing). |
+| `lastMarks` / `lastListItem` | The marks / list-item type active at the caret. Drive the formatting bar from these. |
+| `applyBold`, `applyItalic`, `applyUnderline`, `applyStrikeThrough`, `applyHighlight` | Toggle a mark on the current selection — `apply…(true)` adds it, `apply…(false)` removes it. |
+| `applyTextStyle(fontSize, color)` | Set the font size and/or color (`color` is a hex string, or `null` to clear). |
+| `composition` | The current composition range. |
+| `annotatedStringForViewer` | A pre-built `AnnotatedString` (+ inline task-checkbox content) for viewer/read-only rendering. |
+| `toJson()` | Serialize the current document. |
 
-The nested `RichTextState.Saver` persists text, selection, configuration, JSON, and the viewer flag across configuration changes; the non-serializable `onUrlClicked` callback is re-attached on restore by `rememberRichTextState`.
+The nested `TextKitState.Saver` persists text, selection, configuration, JSON, and the viewer flag across configuration changes; the non-serializable `onUrlClicked` callback is re-attached on restore by `rememberTextKitState`.
+
+### Example: apply marks from a formatting bar
+
+At the Compose layer you don't build `TextEditorSelectedMark`s by hand — the `apply…` toggles do that for you. Each one adds the mark when `selected` is `true` and removes it when `false`, **preserving the other marks already active** at the selection/caret. When there is no selection, the toggle updates the *stored marks* (`lastMarks`) so the next typed characters inherit the formatting.
+
+```kotlin
+import com.jjrodcast.textkit.ui.TextKitEditor
+import com.jjrodcast.textkit.ui.TextKitFormattingBar
+import com.jjrodcast.textkit.ui.TextKitScreen
+import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
+import com.jjrodcast.textkit.ui.state.rememberTextKitState
+
+@Composable
+fun Editor(documentJson: String) {
+    val state = rememberTextKitState(json = documentJson, isViewer = false)
+    val barState = rememberTextKitFormattingBarState()
+
+    // Mirror the caret's active formatting into the bar whenever the selection moves.
+    LaunchedEffect(state.lastMarks, state.lastListItem) {
+        barState.syncFrom(state.lastMarks, state.lastListItem)
+    }
+
+    TextKitScreen {
+        TextKitFormattingBar(
+            barState = barState,
+            onBoldClick = { selected -> state.applyBold(selected) },
+            onItalicClick = { selected -> state.applyItalic(selected) },
+            onUnderlineClick = { selected -> state.applyUnderline(selected) },
+            onStrikeThroughClick = { selected -> state.applyStrikeThrough(selected) },
+            onHighlightClick = { selected -> state.applyHighlight(selected) },
+        )
+        TextKitEditor(state = state)
+    }
+}
+```
+
+### Example: change color / font size
+
+```kotlin
+// Set the color (hex string) and keep the current font size, or pass null to clear the color.
+state.applyTextStyle(fontSize = 18, color = "#E53935")
+state.applyTextStyle(fontSize = 18, color = null)
+```
+
+> Under the hood every `apply…` call routes to the manager's `updateDocument(...)` with a `Format` transaction (see [Using the engine directly](#using-the-engine-directly-textkiteditormanager)). Reach for the manager API directly only when you need links/colors or when driving the engine without Compose.
 
 ---
 
@@ -268,6 +316,5 @@ The nested `RichTextState.Saver` persists text, selection, configuration, JSON, 
 
 - Offsets are indices into the plain-text stream returned by `text`; keep your UI selection in the same `TextRange` coordinate space.
 - `getParagraphs()` / `TextEditorItem` expose `start`/`end` offsets and marks/decorator for custom rendering.
-- The platform entry points (`androidApp`, `desktopApp`, `webApp`, `iosApp`) currently render placeholder content and are not yet wired to `RichTextState` — the editor engine and its Compose state layer are the substance of the project.
-</content>
-</invoke>
+- Links render as plain styled spans in the editable field; `TextKitEditor` hit-tests the pointer against the stored `TextLayoutResult` to show a hand cursor while hovering a link. In viewer mode, `annotatedStringForViewer` uses real `LinkAnnotation`s (hand cursor and click handling come for free).
+- The platform entry points (`androidApp`, `desktopApp`, `webApp`, `iosApp`) wire `TextKitEditor` + `TextKitFormattingBar` to a `TextKitState` — see `MainActivity` / `main.kt` for a full sample.

@@ -1,0 +1,14 @@
+<resources>
+
+    <string name="bold_text">Bold</string>
+    <string name="italic_text">Italic</string>
+    <string name="underline_text">Underline</string>
+    <string name="strikethrough_text">Strikethrough</string>
+    <string name="highlight_text">Highlight</string>
+    <string name="link_text">Link</string>
+    <string name="ordered_list_text">Ordered list</string>
+    <string name="bulleted_list_text">Bulleted list</string>
+    <string name="text_color_text">Text color</string>
+    <string name="type_text">Type...</string>
+
+</resources>

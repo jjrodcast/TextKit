@@ -68,6 +68,10 @@ kotlin {
             // Serialization
             implementation(libs.jetbrains.kotlinx.serialization.core)
             implementation(libs.jetbrains.kotlinx.serialization.json)
+
+            // Icons
+            implementation(libs.jetbrains.compose.material.icons)
+            implementation(libs.jetbrains.compose.material.icons.extended)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

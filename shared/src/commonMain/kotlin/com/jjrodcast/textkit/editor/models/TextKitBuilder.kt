@@ -5,10 +5,12 @@ import androidx.compose.ui.graphics.Color
 class TextKitBuilder {
 
     private var highlightColor: Color = Color.Yellow
-    private var linkColor: Color = Color(0x1B75D0)
+    // Full-alpha (0xFF…) Long literals. Without the alpha byte these are Int literals and hit the
+    // Color(Int) constructor with alpha 0x00 → fully transparent, so links/text render invisibly.
+    private var linkColor: Color = Color(0xFF1B75D0)
     private var fontSize: Int = 14
 
-    private var textColor: Color = Color(0x000000)
+    private var textColor: Color = Color(0xFF000000)
 
     fun highlightColor(block: () -> Color) {
         this.highlightColor = block()

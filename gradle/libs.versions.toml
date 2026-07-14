@@ -17,7 +17,10 @@ kotlinx-coroutines = "1.11.0"
 material3 = "1.11.0-alpha07"
 arkivanovDecompose = "3.5.0"
 arkivanovEssenty = "2.5.0"
-jetbrainsKotlinxSerialization = "1.10.0"
+jetbrainsKotlinxSerialization = "1.11.0"
+jetbrainsIconsCore = "1.7.3"
+jetbrainsIconsExtended = "1.7.3"
+foundationLayout = "1.11.4"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -43,7 +46,9 @@ decompose = { module = "com.arkivanov.decompose:decompose", version.ref = "arkiv
 essenty-lifecycle = { module = "com.arkivanov.essenty:lifecycle", version.ref = "arkivanovEssenty" }
 jetbrains-kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "jetbrainsKotlinxSerialization" }
 jetbrains-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "jetbrainsKotlinxSerialization" }
-
+jetbrains-compose-material-icons = { module = "org.jetbrains.compose.material:material-icons-core", version.ref = "jetbrainsIconsCore" }
+jetbrains-compose-material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "jetbrainsIconsExtended" }
+androidx-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

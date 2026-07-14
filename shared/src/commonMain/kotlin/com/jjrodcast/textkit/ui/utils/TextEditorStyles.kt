@@ -21,7 +21,7 @@ import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 
 internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): SpanStyle {
     return SpanStyle(
-        color = createColorSpanStyle(configuration.textColor),
+        color = createColorSpanStyle(configuration.linkColor),
         fontWeight = createBoldSpanStyle(),
         fontStyle = createItalicSpanStyle(),
         fontSize = createTextSizeStyle(),
@@ -35,15 +35,18 @@ internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): Sp
     )
 }
 
-private fun TextEditorItem.createColorSpanStyle(defaultColor: Color): Color {
-    val textSizeColorMark = marks.filterIsInstance<TextStyleMark>().firstOrNull()
-    val isDefaultTextSize = textSizeColorMark?.isDefaultColor() ?: false
-    val isLink = marks.any { it is LinkMark }
-    return when {
-        ((!isLink && textSizeColorMark != null) || (isLink && textSizeColorMark != null)) &&
-                !isDefaultTextSize -> textSizeColorMark.attrs.createColor()
+private fun TextEditorItem.createColorSpanStyle(linkColor: Color): Color {
 
-        isLink -> defaultColor
+    val explicitColor = marks.filterIsInstance<TextStyleMark>()
+        .firstOrNull()
+        ?.attrs
+        ?.takeIf { !it.color.isNullOrEmpty() }
+        ?.createColor()
+        ?.takeIf { it != Color.Unspecified }
+
+    return when {
+        explicitColor != null -> explicitColor
+        marks.any { it is LinkMark } -> linkColor
         else -> Color.Unspecified
     }
 }
@@ -74,7 +77,7 @@ private fun TextEditorItem.createLineThroughSpanStyle() =
 private fun TextStyleAttrs.createColor(): Color {
     return try {
         Color(color.orEmpty().toColorInt())
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         Color.Unspecified
     }
 }

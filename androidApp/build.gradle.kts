@@ -12,6 +12,7 @@ kotlin {
     }
 }
 dependencies {
+    implementation(libs.androidx.foundation.layout)
     implementation(projects.shared)
 
     implementation(libs.androidx.activity.compose)
