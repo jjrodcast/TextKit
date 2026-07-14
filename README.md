@@ -267,7 +267,9 @@ The nested `TextKitState.Saver` persists text, selection, configuration, JSON, a
 
 ### Example: apply marks from a formatting bar
 
-At the Compose layer you don't build `TextEditorSelectedMark`s by hand — the `apply…` toggles do that for you. Each one adds the mark when `selected` is `true` and removes it when `false`, **preserving the other marks already active** at the selection/caret. When there is no selection, the toggle updates the *stored marks* (`lastMarks`) so the next typed characters inherit the formatting.
+At the Compose layer you don't build `TextEditorSelectedMark`s by hand, and you don't call `updateDocument` — that method is **private** on `TextKitState`. Use the `apply…` toggles instead; each one adds the mark when `selected` is `true` and removes it when `false`, **preserving the other marks already active** at the selection/caret. When there is no selection, the toggle updates the *stored marks* (`lastMarks`) so the next typed characters inherit the formatting.
+
+> Note: the public `updateDocument(...)` shown in [Using the engine directly](#using-the-engine-directly-textkiteditormanager) belongs to `TextKitEditorManager`, not `TextKitState`. Drop to the manager only when you need links/colors or are driving the engine without Compose.
 
 ```kotlin
 import com.jjrodcast.textkit.ui.TextKitEditor
