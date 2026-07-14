@@ -36,11 +36,9 @@ fun TextKitSample() {
             onUnderlineClick = state::applyUnderline,
             onStrikeThroughClick = state::applyStrikeThrough,
             onHighlightClick = state::applyHighlight,
-            onLinkClick = {
-                state.openLinkEditorForSelection()
-            },
-            onOrderedListClick = {},
-            onBulletedListClick = {}
+            onLinkClick = { state.applyLink() },
+            onOrderedListClick = state::toggleOrderedList,
+            onBulletedListClick = state::toggleUnorderedList
         )
         Spacer(Modifier.size(6.dp))
         // Wrap the editor in a Box so the popup overlays it (shares its coordinate space) and

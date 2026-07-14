@@ -53,7 +53,6 @@ import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorParagraph
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorSelectedMark
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransaction
@@ -261,13 +260,38 @@ class TextKitState(
         )
 
     /**
-     * Adds a link with [href] over the current selection (or stores it for the next typed text when
-     * the caret is collapsed), replacing any existing link there. To edit an existing link by its
-     * range — its URL or its text — prefer [updateLink] / [updateLinkText]. Returns whether the
-     * state changed.
+     * Toggles an ordered (numbered) list over the paragraph(s) the current selection touches,
+     * matching [selected] (true = convert to a numbered list, false = back to a plain paragraph).
+     * If those paragraphs are already another list kind it switches them in place. Works with a
+     * collapsed caret (acts on the caret's own paragraph). Returns whether the document changed.
      */
-    fun applyLink(href: String): Boolean =
-        applyMark(LinkMark(LinkAttrs(href = href)), selected = true)
+    fun toggleOrderedList(selected: Boolean): Boolean =
+        updateListItem(if (selected) TextEditorListItem.NumberedList else TextEditorListItem.None)
+
+    /**
+     * Toggles an unordered (bulleted) list over the paragraph(s) the current selection touches,
+     * matching [selected] (true = convert to a bulleted list, false = back to a plain paragraph).
+     * If those paragraphs are already another list kind it switches them in place. Works with a
+     * collapsed caret (acts on the caret's own paragraph). Returns whether the document changed.
+     */
+    fun toggleUnorderedList(selected: Boolean): Boolean =
+        updateListItem(if (selected) TextEditorListItem.BulletedList else TextEditorListItem.None)
+
+    /**
+     * Converts the paragraph(s) in the current [selection] from the caret's current list kind
+     * ([lastListItem]) to [target] ([TextEditorListItem.None] removes the list). Routed as a
+     * list-item change (not a mark change), so it applies to whole paragraphs even with a collapsed
+     * caret. No-op — returns false — when the target already matches the current kind.
+     */
+    private fun updateListItem(target: TextEditorListItem): Boolean {
+        if (lastListItem == target) return false
+        return updateDocument(
+            selection,
+            TextEditorSelectedMark(marks = lastMarks, listItemSelectedValue = lastListItem),
+            TextEditorSelectedMark(marks = lastMarks, listItemSelectedValue = target),
+            transactionType = TextEditorTransactionType.Format
+        )
+    }
 
     /**
      * Toggles a single [mark] on/off while keeping the other marks active at the caret
@@ -427,7 +451,11 @@ class TextKitState(
      * Wire this to `onLinkClick`; confirming the popup routes back through [updateLinkText] (see the
      * `onEdit` handler wired next to [TextKitLinkPopup]). Dismiss it with [dismissLinkPopup].
      */
-    fun openLinkEditorForSelection() {
+    fun applyLink() {
+        openLinkEditor()
+    }
+
+    private fun openLinkEditor() {
         val text = textFieldValue.text
         val current = selection
         val (min, max) = if (!current.collapsed) {
@@ -439,7 +467,8 @@ class TextKitState(
         if (min >= max) return
         val (href, _) = manager.getLink(min, max)
         val range = TextRange(min, max)
-        activeLink = TextKitLinkInfo(text = text.substring(min, max), url = href.orEmpty(), range = range)
+        activeLink =
+            TextKitLinkInfo(text = text.substring(min, max), url = href.orEmpty(), range = range)
         // Pin so focusing the popup's fields (which makes the editor re-report its selection) does
         // not immediately dismiss it — there is no real link here yet to keep it open otherwise.
         pinnedLinkRange = range
@@ -493,7 +522,7 @@ class TextKitState(
     /**
      * Fires [onUrlClicked] when the caret / selection sits on a link and auto-opens the link popup —
      * but only for a **collapsed** caret resting on the link. A selection spanning a link does not
-     * pop it up; adding a link to a selection goes through [openLinkEditorForSelection] (the
+     * pop it up; adding a link to a selection goes through [applyLink] (the
      * formatting-bar action) instead. Leaving the link closes the popup.
      */
     private fun notifyLinkAtSelection(searchType: MarkSearchType) {

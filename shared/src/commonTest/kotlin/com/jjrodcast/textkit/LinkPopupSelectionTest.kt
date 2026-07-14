@@ -33,7 +33,7 @@ class LinkPopupSelectionTest {
 
         assertEquals(TextRange(6, 11), state.textFieldValue.selection)
 
-        state.openLinkEditorForSelection()
+        state.applyLink()
 
         val link = state.activeLink
         assertNotNull(link, "activeLink should be set after opening the editor for a selection")
@@ -48,7 +48,7 @@ class LinkPopupSelectionTest {
         // caret inside "Hello" (index 2)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(2)))
 
-        state.openLinkEditorForSelection()
+        state.applyLink()
 
         val link = state.activeLink
         assertNotNull(link, "collapsed caret inside a word should open the editor for that word")
@@ -60,7 +60,7 @@ class LinkPopupSelectionTest {
     fun openLinkEditor_staysOpenWhenSelectionCollapsesWithinRange() {
         val state = stateWith(SampleDocuments.SINGLE_PARAGRAPH)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 11)))
-        state.openLinkEditorForSelection()
+        state.applyLink()
         assertNotNull(state.activeLink)
 
         // Editor loses focus to the popup's URL field → it reports a collapsed selection inside the
@@ -74,7 +74,7 @@ class LinkPopupSelectionTest {
     fun openLinkEditor_closesWhenSelectionMovesOffRange() {
         val state = stateWith(SampleDocuments.SINGLE_PARAGRAPH)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 11)))
-        state.openLinkEditorForSelection()
+        state.applyLink()
         assertNotNull(state.activeLink)
 
         // Caret genuinely moves off the opened range → the popup dismisses.
@@ -89,7 +89,7 @@ class LinkPopupSelectionTest {
         // text == "visit test now"; select "test" (6..10)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 10)))
 
-        state.openLinkEditorForSelection()
+        state.applyLink()
 
         val link = state.activeLink
         assertNotNull(link)
@@ -121,7 +121,7 @@ class LinkPopupSelectionTest {
     fun updateLinkText_leavesCollapsedCaretAtEndAndClosesPopup() {
         val state = stateWith(SampleDocuments.SINGLE_PARAGRAPH)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 11)))
-        state.openLinkEditorForSelection()
+        state.applyLink()
         assertNotNull(state.activeLink)
 
         val applied = state.updateLinkText(newText = "world", url = "https://x.com", range = TextRange(6, 11))
@@ -136,7 +136,7 @@ class LinkPopupSelectionTest {
     fun updateLinkText_longerText_collapsesCaretAtNewEnd() {
         val state = stateWith(SampleDocuments.SINGLE_PARAGRAPH)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 11)))
-        state.openLinkEditorForSelection()
+        state.applyLink()
 
         val applied = state.updateLinkText(newText = "internet", url = "https://x.com", range = TextRange(6, 11))
 
@@ -151,7 +151,7 @@ class LinkPopupSelectionTest {
     fun removeLink_leavesCollapsedCaretAndClosesPopup() {
         val state = stateWith(paragraphWithLink)
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(6, 10)))
-        state.openLinkEditorForSelection()
+        state.applyLink()
         assertNotNull(state.activeLink)
 
         val removed = state.removeLink(TextRange(6, 10))
