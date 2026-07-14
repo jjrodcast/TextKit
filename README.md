@@ -1,5 +1,7 @@
 # TextKit Editor Engine
 
+This is an alpha version (work in progress)
+
 A **rope-backed piece-table rich-text editor engine** for Kotlin Multiplatform / Compose Multiplatform, targeting Android, iOS, Web (Wasm + JS), and Desktop (JVM).
 
 The engine lives in `shared/src/commonMain/kotlin/com/jjrodcast/textkit/editor/` and manages the document model, formatting, and (de)serialization. A thin Compose state layer in `shared/src/commonMain/kotlin/com/jjrodcast/textkit/ui/` (`TextKitState`) bridges the engine to a Compose `TextField`, but the engine itself stays UI-agnostic and can be driven directly.
