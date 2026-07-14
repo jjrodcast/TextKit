@@ -129,8 +129,14 @@ internal object FormatTransaction {
 
         return when {
             sideIndex < rootIndex -> {
+                // Only coalesce with the left neighbor when it lives in the SAME paragraph. If it
+                // ends a paragraph (trailing line break) the pieces belong to different paragraphs;
+                // merging them feeds a left-based offset into the central-piece transaction, which
+                // computes a negative delta and corrupts the piece boundaries (e.g. removing a link
+                // in its own paragraph would splice it into the previous paragraph's text).
+                val canMerge = hasSameMarks && !sideItem.isLastOnParagraph
                 val offset = if (sideItem.piece.isDecorator) range.min else sideItem.pieceStart
-                if (hasSameMarks) {
+                if (canMerge) {
                     transaction.updateMarks(sideItem, rootItem, null, offset, range.length, marks)
                 } else {
                     transaction.updateMarks(null, rootItem, null, range.min, range.length, marks)
@@ -138,7 +144,10 @@ internal object FormatTransaction {
             }
 
             else -> {
-                if (hasSameMarks) {
+                // Symmetric guard: only coalesce with the right neighbor when the root piece does
+                // not end its paragraph (otherwise the right neighbor is in the next paragraph).
+                val canMerge = hasSameMarks && !rootItem.isLastOnParagraph
+                if (canMerge) {
                     transaction.updateMarks(
                         null,
                         rootItem,
