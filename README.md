@@ -17,6 +17,7 @@ Key characteristics:
 - **Rich formatting** — bold, italic, underline, strikethrough, highlight, links, and text style (color + font size), plus block structures: headings (h1–h6), ordered / bullet / task lists, and blockquotes.
 - **Incremental plain-text cache** — plain text is cached and patched in place rather than rebuilt on every edit.
 - **Compose integration** — `TextKitState` binds the engine to a `BasicTextField`, exposing `textFieldValue`, selection helpers, link info, and a ready-to-render `AnnotatedString` for viewer mode.
+- **Ready-made UI** — drop-in composables: `TextKitEditor` (the editable field), `TextKitFormattingBar` (bold / italic / underline / strike / highlight, links, ordered & bulleted lists), and `TextKitLinkPopup` — a speech-bubble card with a rounded pointer for adding, editing, and removing links.
 - **Configurable** — colors (highlight, link, text) and base font size are supplied via a `TextKitConfiguration`, built with a small DSL.
 - **Multiplatform** — pure `commonMain` logic, with a few `expect`/`actual` seams (`Platform.kt`, `utils/Constants.kt`, `transactions/text/TextDecoratorTransaction.kt`).
 
@@ -46,7 +47,14 @@ PieceRope  +  RopeNode                 (core/piecetable/rope/) ← balanced rope
 
 ### 0. `ui/TextKitState` (Compose layer)
 
-A `@Stable` state holder that wraps a `TextKitEditorManager` and adapts it to Compose. Created with the `rememberTextKitState(json, isViewer, configuration, onUrlClicked)` composable, it is `rememberSaveable`-backed (via a nested `Saver`) and exposes `textFieldValue`, `composition`, `lastMarks` / `lastListItem` (the caret's active formatting), `annotatedStringForViewer`, and the editing entry points — the `applyBold` / `applyItalic` / `applyUnderline` / `applyStrikeThrough` / `applyHighlight` / `applyTextStyle` mark toggles, plus `onTextFieldChange`, `onTextLayout`, and `toJson`. Rendering helpers live in `ui/utils/` (`TextEditorStyles`, `Savers`).
+A `@Stable` state holder that wraps a `TextKitEditorManager` and adapts it to Compose. Created with the `rememberTextKitState(json, isViewer, configuration)` composable, it is `rememberSaveable`-backed (via a nested `Saver`) and exposes `textFieldValue`, `composition`, `lastMarks` / `lastListItem` (the caret's active formatting), `activeLink`, and `annotatedStringForViewer`, plus the editing entry points:
+
+- **Marks** — `applyBold` / `applyItalic` / `applyUnderline` / `applyStrikeThrough` / `applyHighlight` / `applyTextStyle`.
+- **Lists** — `toggleOrderedList(selected)` / `toggleUnorderedList(selected)`.
+- **Links** — `applyLink()` (opens the popup for the selection, or the word under a collapsed caret), `updateLink` / `updateLinkText` / `removeLink`, plus `activeLink`, `dismissLinkPopup`, and `linkBoundingBox` to drive the popup.
+- **Plumbing** — `onTextFieldChange`, `onTextLayout`, `toJson`.
+
+The companion composables `TextKitEditor`, `TextKitFormattingBar`, and `TextKitLinkPopup` (a card anchored to the link, its outline including a rounded pointer aimed at the link) live alongside it in `ui/`. Rendering helpers live in `ui/utils/` (`TextEditorStyles`, `Savers`).
 
 ### 1. `core/TextKitEditorManager`
 
@@ -237,7 +245,7 @@ editor.getParagraphs().forEach { paragraph ->
 For Compose apps, `TextKitState` wraps the manager and binds it to a `BasicTextField`. Create it with `rememberTextKitState(...)`:
 
 ```kotlin
-import com.jjrodcast.textkit.ui.rememberTextKitState
+import com.jjrodcast.textkit.ui.state.rememberTextKitState
 
 val configuration = createTextKitConfiguration { /* … */ }
 
@@ -245,11 +253,10 @@ val state = rememberTextKitState(
     json = documentJson,
     isViewer = false,
     configuration = configuration,
-    // Fired when a link is tapped (viewer) or the caret / selection lands on a link (editing).
-    // `range` is the link's TextRange as reported by the manager.
-    onUrlClicked = { url, range -> /* open the link / show link options */ },
 )
 ```
+
+> The link callback `onUrlClicked` is a parameter of the `TextKitEditor` composable (not of `rememberTextKitState`). It fires with `(url, text, range)` when a link is tapped in viewer mode, or when the caret / selection lands on a link while editing.
 
 `TextKitState` exposes:
 
@@ -261,11 +268,19 @@ val state = rememberTextKitState(
 | `lastMarks` / `lastListItem` | The marks / list-item type active at the caret. Drive the formatting bar from these. |
 | `applyBold`, `applyItalic`, `applyUnderline`, `applyStrikeThrough`, `applyHighlight` | Toggle a mark on the current selection — `apply…(true)` adds it, `apply…(false)` removes it. |
 | `applyTextStyle(fontSize, color)` | Set the font size and/or color (`color` is a hex string, or `null` to clear). |
+| `toggleOrderedList(selected)` / `toggleUnorderedList(selected)` | Convert the paragraph(s) the selection touches to a numbered / bulleted list (`true`) or back to a plain paragraph (`false`). Switches kind in place and works with a collapsed caret. |
+| `applyLink()` | Open `TextKitLinkPopup` for the current selection, or for the word under a collapsed caret; pre-fills the URL when that text already has a link. |
+| `updateLink(url, range)` | Add / replace the link over `range` (empty `url` removes it). Leaves a collapsed caret at the end and closes the popup. |
+| `updateLinkText(newText, url, range)` | Set `url` on `range`, replacing its text with `newText` when it changed. Used by the popup's **Edit** action. |
+| `removeLink(range)` | Remove the link over `range` (keeps other marks). |
+| `activeLink` | The link currently shown in the popup (`TextKitLinkInfo?`), or `null`. Observe it to render `TextKitLinkPopup`. |
+| `dismissLinkPopup()` | Close the popup (clears `activeLink`). |
+| `linkBoundingBox(range)` | Local `Rect` of the link, used to anchor the popup. |
 | `composition` | The current composition range. |
 | `annotatedStringForViewer` | A pre-built `AnnotatedString` (+ inline task-checkbox content) for viewer/read-only rendering. |
 | `toJson()` | Serialize the current document. |
 
-The nested `TextKitState.Saver` persists text, selection, configuration, JSON, and the viewer flag across configuration changes; the non-serializable `onUrlClicked` callback is re-attached on restore by `rememberTextKitState`.
+The nested `TextKitState.Saver` persists text, selection, configuration, JSON, and the viewer flag across configuration changes.
 
 ### Example: apply marks from a formatting bar
 
