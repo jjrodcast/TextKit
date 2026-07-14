@@ -36,7 +36,10 @@ fun TextKitSample() {
             onUnderlineClick = state::applyUnderline,
             onStrikeThroughClick = state::applyStrikeThrough,
             onHighlightClick = state::applyHighlight,
-            onLinkClick = { },
+            onLinkClick = {
+                println("clicked")
+                state.openLinkEditorForSelection()
+            },
             onOrderedListClick = {},
             onBulletedListClick = {}
         )
@@ -51,7 +54,7 @@ fun TextKitSample() {
             TextKitLinkPopup(
                 state = state,
                 onEdit = { link ->
-                    state.updateLink(url = link.url, range = link.range)
+                    state.updateLinkText(newText = link.text, url = link.url, range = link.range)
                 },
                 onRemove = { link -> state.removeLink(link.range) },
             )

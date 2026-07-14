@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -152,18 +153,22 @@ fun TextKitLinkPopup(
             bottom = ContentPadding + if (!pointingUp) pointerPadding else 0.dp,
         )
 
-        LinkPopupContent(
-            link = link,
-            containerColor = containerColor,
-            shape = shape,
-            contentPadding = contentPadding,
-            onEdit = onEdit,
-            onRemove = onRemove,
-            onClose = onClose,
-            modifier = Modifier
-                .offset { IntOffset(x, y) }
-                .onSizeChanged { cardSize = it },
-        )
+        // Key on the link so the editable text/URL fields reset to the newly selected link instead
+        // of keeping the previous one's remembered contents.
+        key(link.range.start, link.range.end, link.text, link.url) {
+            LinkPopupContent(
+                link = link,
+                containerColor = containerColor,
+                shape = shape,
+                contentPadding = contentPadding,
+                onEdit = onEdit,
+                onRemove = onRemove,
+                onClose = onClose,
+                modifier = Modifier
+                    .offset { IntOffset(x, y) }
+                    .onSizeChanged { cardSize = it },
+            )
+        }
     }
 }
 
@@ -227,7 +232,12 @@ private data class PopupBubbleShape(
             } else {
                 moveTo(center - halfPointer, bodyBottom)
                 lineTo(center - tipRound * halfPointer, h - tipRound * pointerHeightPx)
-                quadraticTo(center, h, center + tipRound * halfPointer, h - tipRound * pointerHeightPx)
+                quadraticTo(
+                    center,
+                    h,
+                    center + tipRound * halfPointer,
+                    h - tipRound * pointerHeightPx
+                )
                 lineTo(center + halfPointer, bodyBottom)
                 close()
             }
@@ -254,6 +264,7 @@ private fun LinkPopupContent(
     shape: Shape = RoundedCornerShape(CardCornerRadius),
     contentPadding: PaddingValues = PaddingValues(ContentPadding),
 ) {
+    val textState = rememberTextFieldState(link.text)
     val urlState = rememberTextFieldState(link.url)
     Card(
         modifier = modifier.widthIn(max = 320.dp),
@@ -287,10 +298,8 @@ private fun LinkPopupContent(
             }
             HorizontalDivider()
             OutlinedTextField(
-                value = link.text,
-                onValueChange = {},
-                readOnly = true,
-                singleLine = true,
+                state = textState,
+                lineLimits = TextFieldLineLimits.SingleLine,
                 label = { Text(stringResource(Res.string.text_label)) },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -304,14 +313,21 @@ private fun LinkPopupContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = { onRemove(link) }) { Text(stringResource(Res.string.remove_label)) }
+                TextButton(onClick = { onRemove(link) }) {
+                    Text(stringResource(Res.string.remove_label))
+                }
                 Spacer(Modifier.size(8.dp))
                 Button(
-                    onClick = { onEdit(link.copy(url = urlState.text.toString())) }
+                    onClick = {
+                        onEdit(
+                            link.copy(
+                                text = textState.text.toString(),
+                                url = urlState.text.toString(),
+                            )
+                        )
+                    }
                 ) {
-                    Text(
-                        stringResource(Res.string.edit_label)
-                    )
+                    Text(stringResource(Res.string.edit_label))
                 }
             }
         }

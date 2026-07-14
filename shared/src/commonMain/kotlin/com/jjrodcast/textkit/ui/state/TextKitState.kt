@@ -190,28 +190,74 @@ class TextKitState(
         updateAnnotatedString(textFieldValue)
     }
 
+    /**
+     * Serializes the current document to the ProseMirror-style JSON string (the same format
+     * [rememberTextKitState] accepts as `json`). Use it to persist the editor's contents.
+     */
     fun toJson() = manager.toJson()
 
+    /**
+     * Receives the editor's latest [TextLayoutResult]; wire it to the text field's `onTextLayout`.
+     * It backs coordinate-based lookups such as link hit-testing and [linkBoundingBox], so those
+     * return nothing until the first layout pass has run.
+     */
     fun onTextLayout(textLayoutResult: TextLayoutResult) {
         this.textLayoutResult = textLayoutResult
     }
 
+    /**
+     * Toggles **bold** on the current selection, matching [selected] (true = on, false = off). With
+     * a collapsed caret it stores the change in [lastMarks] so the next typed text inherits it.
+     * Returns whether the state changed.
+     */
     fun applyBold(selected: Boolean): Boolean = applyMark(BoldMark(), selected)
 
+    /**
+     * Toggles *italic* on the current selection, matching [selected] (true = on, false = off). With
+     * a collapsed caret it stores the change in [lastMarks] so the next typed text inherits it.
+     * Returns whether the state changed.
+     */
     fun applyItalic(selected: Boolean): Boolean = applyMark(ItalicMark(), selected)
 
+    /**
+     * Toggles the highlight mark on the current selection, matching [selected] (true = on, false =
+     * off). With a collapsed caret it stores the change in [lastMarks] so the next typed text
+     * inherits it. Returns whether the state changed.
+     */
     fun applyHighlight(selected: Boolean): Boolean = applyMark(HighlightMark(), selected)
 
+    /**
+     * Toggles underline on the current selection, matching [selected] (true = on, false = off).
+     * With a collapsed caret it stores the change in [lastMarks] so the next typed text inherits it.
+     * Returns whether the state changed.
+     */
     fun applyUnderline(selected: Boolean): Boolean = applyMark(UnderlineMark(), selected)
 
+    /**
+     * Toggles strike-through on the current selection, matching [selected] (true = on, false = off).
+     * With a collapsed caret it stores the change in [lastMarks] so the next typed text inherits it.
+     * Returns whether the state changed.
+     */
     fun applyStrikeThrough(selected: Boolean): Boolean = applyMark(StrikeMark(), selected)
 
+    /**
+     * Applies a text-style mark — [fontSize] (in the document's font-size units) and a [color] hex
+     * string such as `#FF0000`, or null to leave the color unset — over the current selection,
+     * replacing any existing text style there. With a collapsed caret it is stored for the next
+     * typed text. Returns whether the state changed.
+     */
     fun applyTextStyle(fontSize: Int, color: String?): Boolean =
         applyMark(
             TextStyleMark(TextStyleAttrs(fontSize = fontSize, color = color)),
             selected = true
         )
 
+    /**
+     * Adds a link with [href] over the current selection (or stores it for the next typed text when
+     * the caret is collapsed), replacing any existing link there. To edit an existing link by its
+     * range — its URL or its text — prefer [updateLink] / [updateLinkText]. Returns whether the
+     * state changed.
+     */
     fun applyLink(href: String): Boolean =
         applyMark(LinkMark(LinkAttrs(href = href)), selected = true)
 
@@ -293,6 +339,99 @@ class TextKitState(
     /** Removes the link over [range] (e.g. the range from [activeLink]). */
     fun removeLink(range: TextRange): Boolean = updateLink(url = "", range = range)
 
+    /**
+     * Sets [url] on [range], replacing the range's visible text with [newText] first when it
+     * changed, and collapses the caret at the end of the resulting text. Meant for a link popup
+     * where both the text and the URL are editable — including adding a link to a fresh selection
+     * (leave [newText] as the selected text and it only attaches the URL).
+     *
+     * When [newText] equals the current text over [range], the swap is skipped and only [updateLink]
+     * runs, so per-character marks in the range survive (a full text replace would flatten them to
+     * the marks at the range start). When it differs, the text is swapped — inheriting the range
+     * start's marks — and then the link is (re)applied over the new span. Passing an empty [newText]
+     * is a no-op (nothing to show); use [removeLink] to drop the link instead.
+     */
+    fun updateLinkText(newText: String, url: String, range: TextRange): Boolean {
+        if (newText.isEmpty()) return false
+
+        val min = range.min.coerceIn(0, textFieldValue.text.length)
+        val max = range.max.coerceIn(min, textFieldValue.text.length)
+        val currentText = textFieldValue.text.substring(min, max)
+
+        val end = if (newText == currentText) {
+            // Text unchanged (e.g. just attaching a URL to a selection): don't rewrite the span, so
+            // any per-character formatting inside it is preserved.
+            max
+        } else {
+            val action = TextEditorAction.TextUpdated(
+                removeLength = range.length,
+                text = newText,
+                offset = range.min,
+                selection = TextRange(range.min + newText.length),
+            )
+            val (updated, _) = TextTransaction.onTextUpdated(action, manager)
+            if (!updated) return false
+            val newEnd = range.min + newText.length
+            // Refresh the rendered text after the swap so the field reflects it even if the link
+            // re-apply below is a no-op (unchanged URL).
+            selection = TextRange(newEnd)
+            updateAnnotatedString(textFieldValue.copy(selection = TextRange(newEnd)))
+            newEnd
+        }
+
+        // (Re)apply the link over the resulting span so the (possibly edited) URL is the one stored.
+        updateLink(url = url, range = TextRange(range.min, end))
+
+        // Land the caret right after the link regardless of the length change.
+        selection = TextRange(end)
+        updateAnnotatedString(textFieldValue.copy(selection = TextRange(end)))
+        readSelectionContext()
+        return true
+    }
+
+    /**
+     * Opens the link popup so a URL can be attached to text — the action behind a formatting bar's
+     * link button. Uses the current selection when there is one; with a collapsed caret it falls
+     * back to the word under the caret, so it also works when the user just clicks inside a word
+     * (or focus collapsed the selection). No-op when there is nothing to link (e.g. the caret sits
+     * on whitespace). If the target already carries a link its URL is pre-filled, so the popup edits
+     * the existing link instead of stacking a new one.
+     *
+     * Wire this to `onLinkClick`; confirming the popup routes back through [updateLinkText] (see the
+     * `onEdit` handler wired next to [TextKitLinkPopup]). Dismiss it with [dismissLinkPopup].
+     */
+    fun openLinkEditorForSelection() {
+        val text = textFieldValue.text
+        val current = selection
+        val (min, max) = if (!current.collapsed) {
+            val lo = current.min.coerceIn(0, text.length)
+            lo to current.max.coerceIn(lo, text.length)
+        } else {
+            wordBoundsAt(text, current.min.coerceIn(0, text.length))
+        }
+        if (min >= max) return
+        val (href, _) = manager.getLink(min, max)
+        activeLink = TextKitLinkInfo(
+            text = text.substring(min, max),
+            url = href.orEmpty(),
+            range = TextRange(min, max),
+        )
+    }
+
+    /**
+     * Word (non-whitespace run) surrounding [offset], as a `min..max` pair. Looks left first so a
+     * caret resting right after a word still selects it; returns a collapsed pair (min == max) when
+     * [offset] is not adjacent to any word character.
+     */
+    private fun wordBoundsAt(text: String, offset: Int): Pair<Int, Int> {
+        fun isWordChar(index: Int) = index in text.indices && !text[index].isWhitespace()
+        var start = offset
+        var end = offset
+        while (start > 0 && isWordChar(start - 1)) start--
+        while (end < text.length && isWordChar(end)) end++
+        return start to end
+    }
+
     private fun getSelectedMarksWithType(): MarkSearchType {
         return manager.getSearchMarkType(selection)
     }
@@ -366,6 +505,12 @@ class TextKitState(
         }
     }
 
+    /**
+     * Entry point for every text-field edit; wire it to the field's `onValueChange`. It diffs
+     * [newTextFieldValue] against the current value and routes the change to the piece table as an
+     * insert, a delete, a clipboard replace, or a pure selection move, keeping marks, decorators and
+     * the rendered [textFieldValue] consistent.
+     */
     fun onTextFieldChange(newTextFieldValue: TextFieldValue = prevTextFieldValue) {
         prevTextFieldValue = newTextFieldValue
 
