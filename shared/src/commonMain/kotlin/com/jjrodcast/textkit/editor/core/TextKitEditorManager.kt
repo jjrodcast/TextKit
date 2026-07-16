@@ -1,6 +1,10 @@
 package com.jjrodcast.textkit.editor.core
 
 import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.core.models.TextEditorModel
+import com.jjrodcast.textkit.editor.core.parser.Mark
+import com.jjrodcast.textkit.editor.core.parser.MentionAttrs
+import com.jjrodcast.textkit.editor.core.parser.MentionType
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
@@ -92,4 +96,39 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
     fun getParagraphs() = transaction.getParagraphs()
 
     fun onDecoratorChange(offset: Int) = transaction.onDecoratorChange(offset)
+
+    /**
+     * Inserts an atomic mention, replacing [replaceRange] (typically the `@query` text the user was
+     * typing). The inserted piece's visible text is `<triggerKey><label>` and it carries the
+     * mention's id/label so it serializes back to a `mention` node.
+     *
+     * @return the collapsed [TextRange] where the caret should land (right after the mention).
+     */
+    fun insertMention(
+        id: String,
+        label: String,
+        replaceRange: TextRange,
+        marks: Set<Mark> = emptySet()
+    ): TextRange {
+        val triggerChar = configuration.mentionTrigger?.triggerKey ?: MentionType.DEFAULT_MENTION_CHAR
+        val mentionText = triggerChar + label
+        val model = TextEditorModel.create(
+            text = mentionText,
+            marks = marks,
+            mention = MentionAttrs(id = id, label = label)
+        )
+        val start = replaceRange.min
+        val length = replaceRange.length
+        if (length > 0) transaction.update(start, length, model) else transaction.insert(model, start)
+        return TextRange(start + mentionText.length)
+    }
+
+    /**
+     * Deletes the characters in [range]. Used to remove an atomic mention as a whole. Returns the
+     * collapsed [TextRange] where the caret should land (the start of the deleted range).
+     */
+    fun deleteRange(range: TextRange): TextRange {
+        if (range.length > 0) transaction.delete(range.min, range.length)
+        return TextRange(range.min)
+    }
 }

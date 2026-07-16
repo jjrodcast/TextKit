@@ -3,6 +3,7 @@ package com.jjrodcast.textkit.editor.core.models
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.parser.Mark
+import com.jjrodcast.textkit.editor.core.parser.MentionAttrs
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.core.piecetable.models.Source
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
@@ -57,12 +58,13 @@ internal data class TextEditorModel(
             text: String,
             marks: Set<Mark> = emptySet(),
             decorator: TextDecoratorModel? = null,
+            mention: MentionAttrs? = null,
             paragraphType: TextEditorDecoratorItem = TextEditorListItem.None,
             source: Source = Source.ADDED,
             offset: Int = 0,
         ): TextEditorModel {
             return TextEditorModel(
-                piece = RichPiece(source = source, offset = offset, length = text.length, marks = marks, decorator = decorator),
+                piece = RichPiece(source = source, offset = offset, length = text.length, marks = marks, decorator = decorator, mention = mention),
                 text = text,
                 paragraphType = paragraphType
             )

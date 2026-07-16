@@ -518,21 +518,17 @@ internal object PieceTableConverter {
         // 1. Create internal Paragraph
         val internalParagraphs = createInternalParagraphs(textStyled)
 
-        // 2. Return the list of pargraphs
+        // 2. Return the list of paragraphs
         return internalParagraphs.fastMap { paragraph ->
             val texts = paragraph.styledText
                 .mapNotNull { if (it.isDecorator) null else it }
-                .fastMap {
-                    Text(
-                        text = it.text.removeLineBreakSuffix(),
-                        marks = it.piece.marks.toSet()
-                    )
-                }
+                .fastMap { it.toInlineNode() }
 
             when (texts.size) {
                 0 -> EmptyParagraph
                 1 -> { // When the text doesn't have content
-                    if (texts.first().text.isEmpty()) EmptyParagraph
+                    val first = texts.first()
+                    if (first is Text && first.text.isEmpty()) EmptyParagraph
                     else Paragraph(content = texts)
                 }
 

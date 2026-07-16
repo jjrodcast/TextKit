@@ -6,5 +6,10 @@ data class TextKitConfiguration(
     val highlightColor: Color = Color.Yellow,
     val linkColor: Color = Color(0xFF1B75D0),
     val textColor: Color = Color(0xFF000000),
-    val fontSize: Int = 14
-)
+    val fontSize: Int = 14,
+    val triggers: Set<TextKitTrigger> = emptySet()
+) {
+    /** The configured mention trigger, or null when mentions are not enabled. */
+    val mentionTrigger: TextKitTrigger.TextKitMentionTrigger?
+        get() = triggers.filterIsInstance<TextKitTrigger.TextKitMentionTrigger>().firstOrNull()
+}

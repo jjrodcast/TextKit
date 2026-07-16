@@ -434,6 +434,14 @@ object DocumentUtils {
             {
               "type": "paragraph",
               "content": [
+                { "type": "text", "text": "Hey " },
+                { "type": "mention", "attrs": { "id": "111", "label": "Jorge Rodriguez" } },
+                { "type": "text", "text": ", welcome! Type @ to mention someone." }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
                 {
                   "type": "text",
                   "marks": [

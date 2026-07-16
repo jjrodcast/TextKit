@@ -281,7 +281,11 @@ internal object MultiPieceFormatTransaction {
         currentPiece: RichPiece,
         finalMarks: Set<Mark>
     ): Boolean {
-        return lastPiece != null && Mark.areTheSame(
+        // A mention is atomic: never coalesce it with a neighbor when formatting a multi-piece
+        // selection, or its text/identity would be folded into the adjacent piece and lost. This
+        // mirrors the mention-aware guards in PieceTableProcessor.
+        if (lastPiece == null || lastPiece.isMention || currentPiece.isMention) return false
+        return Mark.areTheSame(
             lastPiece.marks,
             finalMarks
         ) && currentPiece.source == lastPiece.source && lastPiece.offset + lastPiece.length == currentPiece.offset

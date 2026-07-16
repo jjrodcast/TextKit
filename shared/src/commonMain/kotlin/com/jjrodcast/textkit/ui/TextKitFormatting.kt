@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -208,6 +209,10 @@ fun TextKitFormattingItem(
 ) {
     Box(
         modifier = modifier
+            // Do not steal focus from the editor: a focusable toolbar button would pull focus off the
+            // BasicTextField on click, collapsing the active selection before the format action runs,
+            // so marks would never reach the selected range.
+            .focusProperties { canFocus = false }
             .toggleable(
                 value = value,
                 onValueChange = onValueChange,

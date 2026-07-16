@@ -20,7 +20,7 @@ import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 
 
 internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): SpanStyle {
-    return SpanStyle(
+    val base = SpanStyle(
         color = createColorSpanStyle(configuration.linkColor),
         fontWeight = createBoldSpanStyle(),
         fontStyle = createItalicSpanStyle(),
@@ -32,6 +32,16 @@ internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): Sp
                 createLineThroughSpanStyle()
             )
         )
+    )
+    if (!isMention) return base
+    // A mention renders as an accented chip: it keeps whatever its marks imply (bold, italic,
+    // underline, strike, size) but overlays the configured mention color + translucent background,
+    // and defaults to a medium weight when it is not explicitly bold.
+    val mentionColor = configuration.mentionTrigger?.color ?: configuration.linkColor
+    return base.copy(
+        color = mentionColor,
+        fontWeight = base.fontWeight ?: FontWeight.Medium,
+        background = mentionColor.copy(alpha = 0.12f)
     )
 }
 
