@@ -168,6 +168,14 @@ class TextKitState(
      */
     private var pinnedLinkRange: TextRange? = null
 
+    /**
+     * Last non-collapsed selection seen. When a formatting action runs while the live [selection]
+     * has collapsed onto (or within) this range — which happens when the editor hands focus to the
+     * formatting bar and re-reports a collapsed caret — the action targets this range instead of
+     * being treated as "no selection". Reset on text edits so it never points at a stale range.
+     */
+    private var lastRangeSelection: TextRange = TextRange.Zero
+
     private var annotatedString by mutableStateOf(AnnotatedString(text = ""))
 
     private val viewerAnnotatedStringState = derivedStateOf {
@@ -323,14 +331,15 @@ class TextKitState(
     }
 
     private fun applyMarks(marks: Set<Mark>): Boolean {
-        // With no selection there is no text to reformat; store the marks so the next typed
+        val target = markTarget()
+        // With no usable selection there is no text to reformat; store the marks so the next typed
         // characters inherit them (and the formatting bar reflects the toggle).
-        if (selection.collapsed) {
+        if (target.collapsed) {
             lastMarks = marks
             return true
         }
         return updateDocument(
-            selection,
+            target,
             TextEditorSelectedMark(
                 marks = lastMarks, listItemSelectedValue = lastListItem
             ),
@@ -339,6 +348,20 @@ class TextKitState(
             ),
             transactionType = TextEditorTransactionType.Format
         )
+    }
+
+    /**
+     * The range a formatting action should target. Normally the live [selection]; but when that has
+     * collapsed onto (or within) [lastRangeSelection] — the editor re-reports a collapsed caret when
+     * it hands focus to the formatting bar — we format that remembered range instead, so a toolbar
+     * click still styles the text the user had selected. A caret that lands off the remembered range
+     * (a deliberate move) is treated as a genuine collapsed selection.
+     */
+    private fun markTarget(): TextRange {
+        if (!selection.collapsed) return selection
+        val pending = lastRangeSelection
+        return if (!pending.collapsed && selection.min in pending.min..pending.max) pending
+        else selection
     }
 
     private fun updateDocument(
@@ -514,6 +537,9 @@ class TextKitState(
      * reads like a mobile highlight without the two selection handles + caret.
      */
     private fun readSelectionContext() {
+        // Remember the live selection while it is a real range, so a formatting action fired after
+        // the editor collapses it (on focus loss to the toolbar) can still target it.
+        if (!selection.collapsed) lastRangeSelection = selection
         val searchType = getSelectedMarksWithType()
         lastMarks = searchType.marks
         lastListItem = searchType.listItem
@@ -631,6 +657,9 @@ class TextKitState(
             selection = range
             updateAnnotatedString(selection)
             mentionState.refreshQuery(textFieldValue.text, selection)
+            // Editing shifts offsets, so a remembered selection is no longer valid.
+            lastRangeSelection = TextRange.Zero
+            updateAnnotatedString(prevTextFieldValue.copy(selection = selection))
         }
     }
 
@@ -644,6 +673,9 @@ class TextKitState(
             selection = range
             updateAnnotatedString(selection)
             mentionState.refreshQuery(textFieldValue.text, selection)
+            // Editing shifts offsets, so a remembered selection is no longer valid.
+            lastRangeSelection = TextRange.Zero
+            updateAnnotatedString(prevTextFieldValue.copy(selection = selection))
         }
     }
 
