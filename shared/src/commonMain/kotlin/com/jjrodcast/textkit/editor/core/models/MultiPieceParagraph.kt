@@ -277,15 +277,20 @@ internal data class MultiPieceParagraph(
     }
 
     private fun getMarksInRange(data: List<TextEditorModel>): Set<Mark> {
-        if (data.isEmpty()) return emptySet()
+        // Only content pieces take part in the "marks common to the whole range" intersection.
+        // Decorator pieces (list bullets/numbers/checkboxes) and pure line-break pieces carry no
+        // marks; counting them would dilute the intersection to empty for multi-paragraph or list
+        // selections whose text actually shares the same marks.
+        val content = data.filter { !it.isDecorator && it.text.removeLineBreakSuffix().isNotEmpty() }
+        if (content.isEmpty()) return emptySet()
 
         // Single pass over all marks: count total occurrences per key and keep the first
-        // instance seen. A mark is included in the result only if its count equals data.size,
-        // which matches the previous flatMap → groupBy → filter(group.size == data.size) chain.
+        // instance seen. A mark is included in the result only if its count equals content.size,
+        // which matches the previous flatMap → groupBy → filter(group.size == content.size) chain.
         val countByKey = HashMap<String, Int>()
         val firstByKey = HashMap<String, Mark>()
 
-        data.forEach { model ->
+        content.forEach { model ->
             model.piece.marks.forEach { mark ->
                 val key = mark.createKey()
                 countByKey[key] = (countByKey[key] ?: 0) + 1
@@ -294,7 +299,7 @@ internal data class MultiPieceParagraph(
         }
 
         return countByKey.entries.mapNotNullTo(HashSet()) { (key, count) ->
-            if (count == data.size) firstByKey[key] else null
+            if (count == content.size) firstByKey[key] else null
         }
     }
 }

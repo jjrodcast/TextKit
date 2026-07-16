@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
@@ -58,6 +59,7 @@ import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransacti
 import com.jjrodcast.textkit.editor.core.transactions.text.TextTransaction
 import com.jjrodcast.textkit.editor.models.MarkSearchType
 import com.jjrodcast.textkit.editor.models.TextKitConfiguration
+import com.jjrodcast.textkit.editor.models.TextKitTrigger
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 import com.jjrodcast.textkit.ui.model.TextKitLinkInfo
 import com.jjrodcast.textkit.ui.utils.createStyle
@@ -136,6 +138,17 @@ class TextKitState(
     var activeLink by mutableStateOf<TextKitLinkInfo?>(null)
         private set
 
+    /** Owns all mention (`@`) behavior: trigger detection, query, atomicity and insertion. */
+    private val mentionState by lazy { TextKitMentionState(manager, configuration) }
+
+    /**
+     * The text typed after the mention trigger char (e.g. after `@`), or null when the mention
+     * picker is not active. Observe this to show a mention popup and filter its candidates; it
+     * updates on every keystroke and is cleared once the query is committed ([selectMention]),
+     * dismissed ([dismissMention]) or invalidated (caret leaves the query, whitespace typed, …).
+     */
+    val mentionQuery: String? get() = mentionState.query
+
     val composition get() = textFieldValue.composition
 
     private var prevTextFieldValue = textFieldValue.copy(text = manager.text)
@@ -194,7 +207,7 @@ class TextKitState(
         manager.load(json, isViewer)
         val text = manager.text
         textFieldValue = textFieldValue.copy(text = text, selection = TextRange.Zero)
-        updateAnnotatedString(textFieldValue)
+        updateAnnotatedString(textFieldValue.selection)
     }
 
     /**
@@ -343,7 +356,7 @@ class TextKitState(
 
         if (updated) {
             this.selection = selection
-            updateAnnotatedString(textFieldValue.copy(selection = selection))
+            updateAnnotatedString(selection)
             // Refresh the caret context so formatting-bar toggles reflect the change just applied.
             readSelectionContext()
         }
@@ -412,7 +425,7 @@ class TextKitState(
             // Refresh the rendered text after the swap so the field reflects it even if the link
             // re-apply below is a no-op (unchanged URL).
             selection = TextRange(newEnd)
-            updateAnnotatedString(textFieldValue.copy(selection = TextRange(newEnd)))
+            updateAnnotatedString(TextRange(newEnd))
             newEnd
         }
 
@@ -432,7 +445,7 @@ class TextKitState(
         activeLink = null
         pinnedLinkRange = null
         selection = TextRange(caret)
-        updateAnnotatedString(textFieldValue.copy(selection = TextRange(caret)))
+        updateAnnotatedString(TextRange(caret))
         // Sync the formatting-bar context to the new caret WITHOUT going through
         // readSelectionContext, which would re-open the popup and re-paint the link highlight.
         val searchType = getSelectedMarksWithType()
@@ -515,7 +528,7 @@ class TextKitState(
         if (range != linkSelectionRange) {
             linkSelectionRange = range
             // Rebuild so the background span is added/removed; keep the caret where it is.
-            updateAnnotatedString(textFieldValue)
+            updateAnnotatedString(textFieldValue.selection)
         }
     }
 
@@ -594,11 +607,18 @@ class TextKitState(
                 // Update selection
                 textFieldValue = prevTextFieldValue
                 selection = textFieldValue.selection
+                // Atomicity: a collapsed caret may not rest inside a mention — snap it out.
+                val snapped = mentionState.snapCaretOutOfMention(selection)
+                if (snapped != selection) {
+                    selection = snapped
+                    textFieldValue = textFieldValue.copy(selection = snapped)
+                }
                 readSelectionContext()
                 checkDecorator(textFieldValue.selection.start, textFieldValue.selection.end)
+                mentionState.refreshQuery(textFieldValue.text, selection)
             } else {
                 // Replacing the same length of characters using the clipboard
-                updateAnnotatedString(prevTextFieldValue)
+                updateAnnotatedString(prevTextFieldValue.selection)
             }
         }
         prevTextFieldValue = TextFieldValue()
@@ -609,22 +629,73 @@ class TextKitState(
         val (result, range) = TextTransaction.onTextUpdated(action, manager)
         if (result) {
             selection = range
-            updateAnnotatedString(prevTextFieldValue.copy(selection = selection))
+            updateAnnotatedString(selection)
+            mentionState.refreshQuery(textFieldValue.text, selection)
         }
     }
 
     private fun handleRemovingText() {
+        // A partial deletion of a mention (e.g. Backspace at its trailing edge) must remove the
+        // whole atomic mention instead of clipping a character off its label.
+        if (handleAtomicMentionDeletion()) return
         val action = createRemoveAction()
         val (result, range) = TextTransaction.onTextUpdated(action, manager)
         if (result) {
             selection = range
-            updateAnnotatedString(prevTextFieldValue.copy(selection = selection))
+            updateAnnotatedString(selection)
+            mentionState.refreshQuery(textFieldValue.text, selection)
         }
     }
 
-    private fun updateAnnotatedString(newTextFieldValue: TextFieldValue) {
+    // region Mentions — thin glue over TextKitMentionState (which owns the logic)
+
+    /** Dismisses the mention popup without inserting anything (e.g. on Escape or outside tap). */
+    fun dismissMention() = mentionState.dismiss()
+
+    /**
+     * Commits the active mention: replaces the `@query` the user typed with an atomic mention node
+     * for ([id], [label]) and drops the caret right after it. No-op when no mention is being composed.
+     * The mention inherits the marks active at the caret ([lastMarks]).
+     */
+    fun selectMention(id: String, label: String) {
+        val caret = mentionState.commitSelection(id, label, selection, lastMarks) ?: return
+        selection = caret
+        updateAnnotatedString(caret)
+    }
+
+    /**
+     * Bounding box (in the text field's local coordinates) of the active trigger char, used to
+     * anchor the mention popup. Null when no mention is being composed or the layout is not ready.
+     */
+    fun mentionAnchorBounds(): Rect? = mentionState.anchorBounds(textLayoutResult)
+
+    /**
+     * When the pending deletion clips a mention rather than removing it whole, removes the whole
+     * mention through the engine and syncs the view. Returns true when it handled the deletion, so
+     * the normal removal path is skipped.
+     */
+    private fun handleAtomicMentionDeletion(): Boolean {
+        val caret = mentionState.deletePartialMention(textFieldValue.text, prevTextFieldValue.text)
+            ?: return false
+        selection = caret
+        updateAnnotatedString(caret)
+        return true
+    }
+
+    // endregion
+
+    private fun updateAnnotatedString(selection: TextRange) {
         annotatedString = defaultAnnotatedStringFormatting().withLinkHighlight()
-        textFieldValue = newTextFieldValue.copy(text = annotatedString.text)
+        val text = annotatedString.text
+        // Build the field value with the NEW text and the selection together so the selection is
+        // validated against the new length. Applying it via `copy(selection = …)` on the old (shorter)
+        // value clamps it to the OLD length first — e.g. after adding list decorators the selection
+        // would stop short of the new end instead of covering the whole (now longer) document.
+        val coerced = TextRange(
+            start = selection.start.coerceIn(0, text.length),
+            end = selection.end.coerceIn(0, text.length),
+        )
+        textFieldValue = TextFieldValue(text = text, selection = coerced)
         visualTransformation =
             VisualTransformation { _ -> TransformedText(annotatedString, OffsetMapping.Identity) }
     }
@@ -831,7 +902,7 @@ class TextKitState(
                 val state = TextKitState(json, isViewer, config)
                     .also { state ->
                         state.textFieldValue = textFieldValue
-                        state.updateAnnotatedString(state.textFieldValue)
+                        state.updateAnnotatedString(state.textFieldValue.selection)
                     }
                 state
             }
@@ -853,21 +924,33 @@ class TextKitState(
 
         private val ConfigurationSaver = Saver<TextKitConfiguration, Any>(
             save = {
+                val mention = it.mentionTrigger
                 arrayListOf(
                     save(it.highlightColor),
                     save(it.linkColor),
                     save(it.textColor),
-                    save(it.fontSize)
+                    save(it.fontSize),
+                    // Persist the mention trigger by its presence + color (its char is fixed by the
+                    // TextKitMentionTrigger type) so mentions keep working across process death.
+                    save(mention != null),
+                    save(mention?.color ?: Color(0xFF1B75D0))
                 )
             },
             restore = {
                 @Suppress("UNCHECKED_CAST")
                 val list = it as List<Any>
+                val hasMention: Boolean = restore(list[4])!!
+                val mentionColor: Color = restore(list[5])!!
                 TextKitConfiguration(
                     highlightColor = restore(list[0])!!,
                     linkColor = restore(list[1])!!,
                     textColor = restore(list[2])!!,
-                    fontSize = restore(list[3])!!
+                    fontSize = restore(list[3])!!,
+                    triggers = if (hasMention) {
+                        setOf(TextKitTrigger.TextKitMentionTrigger(mentionColor))
+                    } else {
+                        emptySet()
+                    }
                 )
             }
         )

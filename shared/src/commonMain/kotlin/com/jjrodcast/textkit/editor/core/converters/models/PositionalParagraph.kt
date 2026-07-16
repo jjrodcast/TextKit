@@ -1,10 +1,9 @@
 package com.jjrodcast.textkit.editor.core.converters.models
 
+import com.jjrodcast.textkit.editor.core.converters.toInlineNode
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.BaseText
-import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.utils.isLineBreak
-import com.jjrodcast.textkit.editor.utils.removeLineBreakSuffix
 
 /**
  * Class to store paragraphs content using positions.
@@ -34,7 +33,7 @@ internal data class PositionalParagraph(
         return if (textStyled.any { it.text.isNotEmpty() }) {
             textStyled.mapNotNull {
                 if (it.text.isLineBreak()) null
-                else Text(text = it.text.removeLineBreakSuffix(), marks = it.piece.marks)
+                else it.toInlineNode()
             }
         } else {
             emptyList()

@@ -13,6 +13,8 @@ import com.jjrodcast.textkit.editor.core.parser.HeadingLevels
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevelsValues
 import com.jjrodcast.textkit.editor.core.parser.ListItem
 import com.jjrodcast.textkit.editor.core.parser.Mark
+import com.jjrodcast.textkit.editor.core.parser.Mention
+import com.jjrodcast.textkit.editor.core.parser.MentionType.DEFAULT_MENTION_CHAR
 import com.jjrodcast.textkit.editor.core.parser.OrderedList
 import com.jjrodcast.textkit.editor.core.parser.Paragraph
 import com.jjrodcast.textkit.editor.core.parser.ParagraphNone
@@ -237,6 +239,23 @@ internal object TextEditorConverter {
                     TextEditorModel.create(
                         text = text,
                         marks = newMarks,
+                        decorator = newDecorator
+                    )
+                )
+            }
+
+            is Mention -> {
+                // Atomic inline node: its visible text is "<triggerKey><label>" and its identity
+                // (id + label) rides on the piece so it can be serialized back to a `mention` node.
+                // Marks apply to the whole chip, resolved the same way as a Text node's marks.
+                val newMarks = recreateMarks(marks, configuration, headingLevel)
+                val newDecorator = decorator as? TextDecoratorModel.BlockquoteDecorator
+                val triggerChar = configuration.mentionTrigger?.triggerKey ?: DEFAULT_MENTION_CHAR
+                items.add(
+                    TextEditorModel.create(
+                        text = triggerChar + (attrs.label ?: EMPTY),
+                        marks = newMarks,
+                        mention = attrs,
                         decorator = newDecorator
                     )
                 )
