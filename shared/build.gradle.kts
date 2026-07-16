@@ -86,7 +86,12 @@ kotlin {
 mavenPublishing {
     publishToMavenCentral()
 
-    signAllPublications()
+    // Only sign when a signing key is available (i.e. in CI, where it is
+    // injected via ORG_GRADLE_PROJECT_signingInMemoryKey). This lets local
+    // `publishToMavenLocal` runs work without GPG keys configured.
+    if (project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
+    }
 
     coordinates(
         groupId = "io.github.jjrodcast",

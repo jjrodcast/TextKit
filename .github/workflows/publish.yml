@@ -36,11 +36,20 @@ jobs:
           V="${{ inputs.version }}"
           echo "value=${V:-${GITHUB_REF_NAME#v}}" >> "$GITHUB_OUTPUT"
 
+      # SIGNING_KEY is stored base64-encoded to avoid newline mangling in secrets.
+      # Generate it with: gpg --export-secret-keys --armor <KEY_ID> | base64
+      - name: Decode signing key
+        run: |
+          {
+            echo "SIGNING_KEY_ARMORED<<__GPG_EOF__"
+            echo "${{ secrets.SIGNING_KEY }}" | base64 --decode
+            echo "__GPG_EOF__"
+          } >> "$GITHUB_ENV"
+
       - name: Publish to Maven Central
         run: ./gradlew :shared:publishToMavenCentral -PlibVersion=${{ steps.version.outputs.value }} --no-configuration-cache --stacktrace
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ env.SIGNING_KEY_ARMORED }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
