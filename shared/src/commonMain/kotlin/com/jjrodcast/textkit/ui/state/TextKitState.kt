@@ -659,7 +659,6 @@ class TextKitState(
             mentionState.refreshQuery(textFieldValue.text, selection)
             // Editing shifts offsets, so a remembered selection is no longer valid.
             lastRangeSelection = TextRange.Zero
-            updateAnnotatedString(prevTextFieldValue.copy(selection = selection))
         }
     }
 
@@ -675,7 +674,6 @@ class TextKitState(
             mentionState.refreshQuery(textFieldValue.text, selection)
             // Editing shifts offsets, so a remembered selection is no longer valid.
             lastRangeSelection = TextRange.Zero
-            updateAnnotatedString(prevTextFieldValue.copy(selection = selection))
         }
     }
 
