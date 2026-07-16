@@ -7,6 +7,9 @@ import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
 import com.jjrodcast.textkit.editor.core.parser.BaseText
 import com.jjrodcast.textkit.editor.core.parser.Blockquote
 import com.jjrodcast.textkit.editor.core.parser.BulletedList
+import com.jjrodcast.textkit.editor.core.parser.EmbedBlock
+import com.jjrodcast.textkit.editor.core.parser.EmbedLabels
+import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
 import com.jjrodcast.textkit.editor.core.parser.HardBreak
 import com.jjrodcast.textkit.editor.core.parser.Heading
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevels
@@ -23,6 +26,7 @@ import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
+import com.jjrodcast.textkit.editor.core.parser.TokenAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichToken
@@ -59,9 +63,18 @@ internal object TextEditorConverter {
         configuration: TextKitConfiguration
     ): TextEditorDocumentModel {
         val lines = arrayListOf<TextEditorParagraphModel>()
+        // Numbers embeds per type (in document order) so their placeholders read "Tabla 1", "Tabla 2".
+        val embedCounts = HashMap<String, Int>()
         document.content.filterNot { it is ParagraphNone }.fastForEach { paragraph ->
-            val items = paragraph.getParagraphContentWithMarkers(configuration = configuration)
-                .filter { it.text.isNotEmpty() }
+            val embedLabel = if (paragraph is EmbedBlock) {
+                val next = (embedCounts[paragraph.embedType] ?: 0) + 1
+                embedCounts[paragraph.embedType] = next
+                EmbedLabels.format(paragraph.embedType, next)
+            } else null
+            val items = paragraph.getParagraphContentWithMarkers(
+                configuration = configuration,
+                embedLabel = embedLabel
+            ).filter { it.text.isNotEmpty() }
             lines.add(TextEditorParagraphModel(items))
         }
         return TextEditorDocumentModel(lines.removeLastBreakLine())
@@ -94,10 +107,28 @@ internal object TextEditorConverter {
 
     private fun BaseParagraph.getParagraphContentWithMarkers(
         decorator: TextDecoratorModel? = null,
-        configuration: TextKitConfiguration
+        configuration: TextKitConfiguration,
+        embedLabel: String? = null
     ): List<TextEditorModel> {
         val items = arrayListOf<TextEditorModel>()
         when (this) {
+            is EmbedBlock -> {
+                // One atomic placeholder piece that carries the whole block JSON on its token; it
+                // occupies its own paragraph (postProcessParagraph appends the trailing line break).
+                val label = embedLabel ?: EmbedLabels.format(embedType, 1)
+                items.add(
+                    TextEditorModel.create(
+                        text = label,
+                        token = RichToken(
+                            type = EmbedTokenType,
+                            attrs = TokenAttrs(id = id, label = label),
+                            payload = raw.toString()
+                        )
+                    )
+                )
+                items.postProcessParagraph(null)
+            }
+
             is Paragraph -> {
                 if (this.content.isEmpty()) items.add(TextEditorModel.create(EMPTY))
                 else {

@@ -8,6 +8,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
+import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
 import com.jjrodcast.textkit.editor.core.parser.HighlightMark
 import com.jjrodcast.textkit.editor.core.parser.ItalicMark
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
@@ -34,6 +35,15 @@ internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): Sp
         )
     )
     if (!isToken) return base
+    // An embedded block (table/image/document) renders as a neutral chip: it has no trigger, so it
+    // uses the link color as accent + a translucent background, at a medium weight.
+    if (tokenType == EmbedTokenType) {
+        return base.copy(
+            color = configuration.linkColor,
+            fontWeight = base.fontWeight ?: FontWeight.Medium,
+            background = configuration.linkColor.copy(alpha = 0.12f)
+        )
+    }
     // An atomic token (mention, hashtag, …) renders as an accented chip: it keeps whatever its marks
     // imply (bold, italic, underline, strike, size) but overlays the color configured for its trigger
     // + translucent background, and defaults to a medium weight when it is not explicitly bold.

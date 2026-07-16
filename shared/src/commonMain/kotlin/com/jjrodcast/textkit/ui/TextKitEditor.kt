@@ -66,6 +66,13 @@ fun TextKitEditor(
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val position = event.changes.firstOrNull()?.position
+                        // A press on an embed placeholder opens its popup and is consumed so the
+                        // click does not move the caret into the atomic placeholder.
+                        if (event.type == PointerEventType.Press && position != null &&
+                            state.openEmbedAt(position)
+                        ) {
+                            event.changes.forEach { it.consume() }
+                        }
                         isHoveringLink = when (event.type) {
                             PointerEventType.Move, PointerEventType.Enter ->
                                 position != null && state.isLinkAtPosition(position)

@@ -9,6 +9,8 @@ import com.jjrodcast.textkit.editor.core.models.TextEditorParagraphModel
 import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
 import com.jjrodcast.textkit.editor.core.parser.BaseText
 import com.jjrodcast.textkit.editor.core.parser.BulletedList
+import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
+import com.jjrodcast.textkit.editor.core.parser.embedBlockFromPayload
 import com.jjrodcast.textkit.editor.core.parser.EmptyDocument
 import com.jjrodcast.textkit.editor.core.parser.EmptyParagraph
 import com.jjrodcast.textkit.editor.core.parser.ListAttrs
@@ -277,6 +279,12 @@ internal object PieceTableConverter {
         endIndex: Int
     ): BaseParagraph {
         val item = elements[startIndex]
+        // An embed placeholder is a single piece carrying the original block JSON on its token:
+        // re-emit that block verbatim instead of a plain paragraph.
+        val embedToken = item.textStyled.firstOrNull()?.piece?.token?.takeIf { it.type == EmbedTokenType }
+        if (embedToken?.payload != null) {
+            return embedBlockFromPayload(embedToken.attrs.id, embedToken.payload)
+        }
         val isDecorator = item.textStyled.firstOrNull()?.isDecorator ?: false
         return if (isDecorator) {
             when (item.key) {
