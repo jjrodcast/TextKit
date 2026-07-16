@@ -1,13 +1,15 @@
+![TextKit](imgs/text_kit_banner.png)
+
 # TextKit
 
 TextKit is a rope-backed, piece-table rich-text editor engine for **Compose Multiplatform**
 (Android, iOS, Desktop/JVM and Web — Wasm & JS). It ships a `TextKitState` holder, ready-made
-editor composables, a formatting bar, link and mention popups, and lossless (de)serialization to a
-**ProseMirror-style JSON document**.
+editor composables, a formatting bar, link popups, a generalized **trigger** system (mentions,
+hashtags, slash commands), and lossless (de)serialization to a **ProseMirror-style JSON document**.
 
 Unlike editors that round-trip through HTML or Markdown, TextKit persists a structured JSON document
-(`type: "doc"` → block nodes → inline runs with marks), so styling, lists, links and mentions
-survive an exact load → edit → export cycle.
+(`type: "doc"` → block nodes → inline runs with marks), so styling, lists, links and inline tokens
+(mentions, hashtags) survive an exact load → edit → export cycle.
 
 ## Table of contents
 
@@ -18,7 +20,7 @@ survive an exact load → edit → export cycle.
 - [Text style (color & size)](#text-style-color--size)
 - [Lists](#lists)
 - [Links](#links)
-- [Mentions](#mentions)
+- [Triggers: mentions, hashtags & slash commands](#triggers-mentions-hashtags--slash-commands)
 - [Formatting bar](#formatting-bar)
 - [Configuration](#configuration)
 - [Read-only / viewer mode](#read-only--viewer-mode)
@@ -66,7 +68,9 @@ Observable properties you can read in composition:
 | `lastMarks` | `Set<Mark>` | Marks active at the caret/selection (drives toggle highlights). |
 | `lastListItem` | `TextEditorDecoratorItem` | List kind at the caret (numbered / bulleted / task / none). |
 | `activeLink` | `TextKitLinkInfo?` | Link under the caret, or `null`. Observe it to show a link popup. |
-| `mentionQuery` | `String?` | Text typed after the mention trigger, or `null` when no mention is being composed. |
+| `activeTrigger` | `TextKitTrigger?` | The trigger currently being composed (`@`/`#`/`/`…), or `null`. Drives which candidate set the popup shows. |
+| `tokenQuery` | `String?` | Text typed after the active trigger char, or `null` when no trigger is being composed. |
+| `mentionQuery` | `String?` | Backward-compatible alias of `tokenQuery`. |
 | `annotatedStringForViewer` | `Pair<AnnotatedString, Map<String, InlineTextContent>>` | Rendered content for read-only display. |
 
 ## Reading the content
@@ -79,7 +83,7 @@ val plain: String = state.textFieldValue.text
 val json: String = state.toJson()
 ```
 
-`toJson()` is lossless: marks, lists, links and mentions are all preserved.
+`toJson()` is lossless: marks, lists, links and inline tokens (mentions, hashtags) are all preserved.
 
 ## Inline styling
 
@@ -156,60 +160,119 @@ state.dismissLinkPopup()                           // hide the popup
 `state.activeLink` (a `TextKitLinkInfo` with `text`, `url`, `range`) is non-null while the caret sits
 on a link — that is what `TextKitLinkPopup` observes.
 
-## Mentions
+## Triggers: mentions, hashtags & slash commands
 
-Mentions are a first-class, **atomic** inline node: `@Someone` behaves as a single unit (the caret
-skips over it, Backspace removes the whole chip) and serializes as:
+A **trigger** is the generalized "type a character to open a popup" mechanism. Every trigger shares
+the same detection, query tracking and popup anchoring; they only differ in what picking a suggestion
+does:
 
-```json
-{ "type": "mention", "attrs": { "id": "111", "label": "Jorge Rodriguez" } }
-```
+- **Atomic token triggers** insert an *indivisible inline node* that is persisted to JSON and
+  round-trips exactly. `@` **mentions** and `#` **hashtags** are built in. A token behaves as a single
+  unit (the caret skips over it, Backspace removes the whole chip) and can carry marks (bold, italic,
+  color, …) over the whole chip.
+- **Ephemeral command triggers** run an *action* and persist nothing. `/` **slash commands** are built
+  in (apply a heading/list, or run any custom callback).
 
-### 1. Enable the trigger
+A mention serializes as `{ "type": "mention", "attrs": { "id": "111", "label": "Jorge Rodriguez" } }`
+and a hashtag as `{ "type": "hashtag", "attrs": { "id": "1", "label": "kotlin" } }`. The trigger char
+(`@`, `#`, `/`) is presentation only — it is never stored in `attrs`.
 
-Register a mention trigger in the configuration (default trigger char is `@`):
+### 1. Enable the triggers
+
+Register the triggers you want; each trigger's chip color is configurable and each trigger char must
+be unique (the builder validates this):
 
 ```kotlin
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import com.jjrodcast.textkit.editor.models.TextKitTrigger
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 
 val configuration = remember {
     createTextKitConfiguration {
-        addTrigger { TextKitTrigger.TextKitMentionTrigger() } // optionally: TextKitMentionTrigger(color = ...)
+        addTrigger { TextKitTrigger.TextKitMentionTrigger() }                            // '@' (blue)
+        addTrigger { TextKitTrigger.TextKitHashtagTrigger(color = Color(0xFF2E7D32)) }   // '#' (green)
+        addTrigger { TextKitTrigger.TextKitSlashTrigger() }                              // '/' commands
     }
 }
 val state = rememberTextKitState(json = document, configuration = configuration)
 ```
 
-### 2. Show the popup
+Observe the in-progress trigger with `state.activeTrigger` and the typed query with `state.tokenQuery`.
 
-Provide the candidate list; the popup filters it by `state.mentionQuery` and inserts the chosen
-mention on tap. Place it in the same `Box` as the editor:
+### 2. Atomic tokens (@ mentions, # hashtags)
+
+Use a single `TextKitTokenPopup` for every atomic-token trigger and pick the candidate list from the
+active trigger. On tap it commits via `state.selectToken(id, label)`, replacing the `<char>query` with
+the atomic node. Place it in the same `Box` as the editor:
 
 ```kotlin
-import com.jjrodcast.textkit.ui.TextKitMentionPopup
-import com.jjrodcast.textkit.ui.model.TextKitMentionSuggestion
+import com.jjrodcast.textkit.ui.TextKitTokenPopup
+import com.jjrodcast.textkit.ui.model.TextKitTokenSuggestion
 
-val people = listOf(
-    TextKitMentionSuggestion(id = "111", label = "Jorge Rodriguez"),
-    TextKitMentionSuggestion(id = "222", label = "Ada Lovelace"),
+val users = listOf(
+    TextKitTokenSuggestion(id = "111", label = "Jorge Rodriguez"),
+    TextKitTokenSuggestion(id = "222", label = "Ada Lovelace"),
+)
+val tags = listOf(
+    TextKitTokenSuggestion(id = "1", label = "kotlin"),
+    TextKitTokenSuggestion(id = "2", label = "compose"),
 )
 
 Box {
     TextKitEditor(state = state)
-    TextKitMentionPopup(
-        state = state,
-        candidates = people,
-        // Optional custom matching (default: case-insensitive label match):
-        // filter = { suggestion, query -> suggestion.label.contains(query, ignoreCase = true) },
-    )
+    // One popup serves every atomic-token trigger; choose candidates by the active trigger.
+    TextKitTokenPopup(state = state) { trigger ->
+        when (trigger) {
+            is TextKitTrigger.TextKitHashtagTrigger -> tags
+            else -> users
+        }
+    }
 }
 ```
 
-Under the hood the popup calls `state.selectMention(id, label)`, which replaces the `@query` the user
-typed with the atomic mention. `state.dismissMention()` cancels an in-progress mention. Mentions can
-also carry marks (bold, italic, color, …) applied over the whole chip.
+`state.dismissToken()` cancels an in-progress token. The popup accepts an optional `filter`
+(default: case-insensitive label match) and ignores ephemeral command triggers (those are served by
+`TextKitSlashCommandPopup`, below).
+
+> **Backward compatibility:** the mention-only helpers still work as thin aliases —
+> `TextKitMentionPopup(state, candidates)`, `TextKitMentionSuggestion`, `state.selectMention(...)`,
+> `state.dismissMention()`, `state.mentionQuery`.
+
+### 3. Slash commands (ephemeral)
+
+Slash commands run an action instead of inserting a node. Use `TextKitSlashCommandPopup` with a list
+of `TextKitCommand`. Picking one removes the `/query` the user typed and then runs the command:
+
+```kotlin
+import com.jjrodcast.textkit.ui.TextKitSlashCommandPopup
+import com.jjrodcast.textkit.ui.model.TextKitCommand
+
+val commands = listOf(
+    TextKitCommand.heading(1),                     // built-in: apply Heading 1
+    TextKitCommand.heading(2, label = "Title 2"),  // built-in with a custom label
+    TextKitCommand.bulletList(),                    // built-in: bulleted list
+    TextKitCommand.orderedList(),                   // built-in: numbered list
+    // Custom: the action receives the live TextKitState — do anything the editor exposes:
+    TextKitCommand.custom(id = "date", label = "Insert date") { it.insertText("2026-07-15") },
+)
+
+Box {
+    TextKitEditor(state = state)
+    TextKitTokenPopup(state = state) { /* users / tags */ emptyList() }
+    TextKitSlashCommandPopup(state = state, commands = commands)
+}
+```
+
+**Built-in command factories:** `TextKitCommand.heading(level, label)`,
+`TextKitCommand.bulletList(label)`, `TextKitCommand.orderedList(label)`, and
+`TextKitCommand.custom(id, label, action)`. The custom `action: (TextKitState) -> Unit` gets the live
+state, so it can call `insertText`, `applyHeading`, `toggleOrderedList`, apply marks, or anything else
+the editor exposes.
+
+**Related state APIs:** `state.runCommand(command)` (remove `/query` + run the action),
+`state.insertText(text)` (insert plain text at the caret), `state.applyHeading(level)` (apply an H1–H6
+font size).
 
 ## Formatting bar
 
@@ -246,7 +309,8 @@ TextKitScreen { // MaterialTheme + Scaffold wrapper (optional)
     Box {
         TextKitEditor(state = state)
         TextKitLinkPopup(state = state, /* onEdit / onRemove */)
-        TextKitMentionPopup(state = state, candidates = people)
+        TextKitTokenPopup(state = state) { /* users / tags by active trigger */ users }
+        TextKitSlashCommandPopup(state = state, commands = commands)
     }
 }
 ```
@@ -268,13 +332,17 @@ val configuration = createTextKitConfiguration {
     highlightColor { Color.Yellow }
     linkColor { Color(0xFF1B75D0) }
     textColor { Color(0xFF000000) }
-    fontSize { 14 }                                       // default font size
-    addTrigger { TextKitTrigger.TextKitMentionTrigger() } // enable @-mentions
+    fontSize { 14 }                                          // default font size
+    addTrigger { TextKitTrigger.TextKitMentionTrigger() }    // '@' mentions
+    addTrigger { TextKitTrigger.TextKitHashtagTrigger() }    // '#' hashtags
+    addTrigger { TextKitTrigger.TextKitSlashTrigger() }      // '/' slash commands
 }
 ```
 
-Pass it to `rememberTextKitState(json = …, configuration = configuration)`. The mention trigger's
-color is configurable via `TextKitMentionTrigger(color = …)`.
+Pass it to `rememberTextKitState(json = …, configuration = configuration)`. Each trigger's chip color
+is configurable via its constructor (e.g. `TextKitMentionTrigger(color = …)`), and each trigger char
+must be unique (the builder throws on duplicates). At runtime you can resolve a trigger with
+`configuration.triggerFor('#')` (by char) or `configuration.triggerForType("hashtag")` (by node type).
 
 ## Read-only / viewer mode
 
@@ -302,7 +370,8 @@ list of block nodes; each block holds inline runs, and inline runs carry `marks`
       "content": [
         { "type": "text", "text": "Hello " },
         { "type": "text", "marks": [{ "type": "bold" }], "text": "world" },
-        { "type": "mention", "attrs": { "id": "111", "label": "Jorge Rodriguez" } }
+        { "type": "mention", "attrs": { "id": "111", "label": "Jorge Rodriguez" } },
+        { "type": "hashtag", "attrs": { "id": "1", "label": "kotlin" } }
       ]
     },
     {
@@ -320,7 +389,9 @@ list of block nodes; each block holds inline runs, and inline runs carry `marks`
 **Block nodes:** `paragraph`, `heading` (`attrs.level` 1–6), `orderedList`, `bulletList`, `taskList`,
 `blockquote`, plus `listItem` / `taskItem` (`attrs.checked`) inside lists.
 
-**Inline nodes:** `text`, `hardBreak`, `mention` (`attrs.id`, `attrs.label`).
+**Inline nodes:** `text`, `hardBreak`, and atomic trigger tokens `mention` and `hashtag` (both with
+`attrs.id`, `attrs.label`). Slash (`/`) commands are ephemeral actions and are **not** persisted as
+nodes.
 
 **Marks** (on inline runs): `bold`, `italic`, `underline`, `strike`, `highlight`, `link`
 (`attrs.href`, `attrs.target`), and `textStyle` (`attrs.color`, `attrs.fontSize`).
