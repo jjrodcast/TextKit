@@ -28,11 +28,12 @@ data class TextStyleAttrs(val color: String? = "", val fontSize: Int = UNSET_FON
 }
 
 /**
- * Attributes of a `mention` inline node. Intentionally limited to `id` and `label` so the node
- * round-trips as exactly `{"type":"mention","attrs":{"id":"…","label":"…"}}`. The trigger char
- * (`@`) is a presentation/config concern (see `TextKitTrigger`) and is never persisted here —
- * adding a defaulted field would leak into the output because [TEXT_EDITOR_JSON] encodes defaults.
+ * Attributes shared by every atomic inline "trigger token" node (`mention`, `hashtag`, …).
+ * Intentionally limited to `id` and `label` so a token round-trips as exactly
+ * `{"type":"<node>","attrs":{"id":"…","label":"…"}}`. The trigger char (`@`, `#`, …) is a
+ * presentation/config concern (see `TextKitTrigger`) and is never persisted here — adding a
+ * defaulted field would leak into the output because [TEXT_EDITOR_JSON] encodes defaults.
  */
 @Serializable
-data class MentionAttrs(val id: String, val label: String? = "")
+data class TokenAttrs(val id: String, val label: String? = "")
 

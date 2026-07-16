@@ -16,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
@@ -42,6 +41,8 @@ import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
+import com.jjrodcast.textkit.editor.core.parser.HeadingLevels
+import com.jjrodcast.textkit.editor.core.parser.HeadingLevelsValues
 import com.jjrodcast.textkit.editor.core.parser.HighlightMark
 import com.jjrodcast.textkit.editor.core.parser.ItalicMark
 import com.jjrodcast.textkit.editor.core.parser.LinkAttrs
@@ -61,6 +62,7 @@ import com.jjrodcast.textkit.editor.models.MarkSearchType
 import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 import com.jjrodcast.textkit.editor.models.TextKitTrigger
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
+import com.jjrodcast.textkit.ui.model.TextKitCommand
 import com.jjrodcast.textkit.ui.model.TextKitLinkInfo
 import com.jjrodcast.textkit.ui.utils.createStyle
 import com.jjrodcast.textkit.ui.utils.restore
@@ -79,7 +81,7 @@ fun rememberTextKitState(
     isViewer: Boolean = false,
     configuration: TextKitConfiguration = remember { createTextKitConfiguration() }
 ): TextKitState {
-    val state = rememberSaveable(saver = TextKitState.Saver) {
+    val state = rememberSaveable(saver = TextKitState.saver(configuration)) {
         TextKitState(json, isViewer, configuration)
             .apply { setup() }
     }
@@ -138,16 +140,19 @@ class TextKitState(
     var activeLink by mutableStateOf<TextKitLinkInfo?>(null)
         private set
 
-    /** Owns all mention (`@`) behavior: trigger detection, query, atomicity and insertion. */
-    private val mentionState by lazy { TextKitMentionState(manager, configuration) }
+    /** Owns all trigger-token behavior (`@`, `#`, `/`, …): detection, query, atomicity, insertion. */
+    private val tokenState by lazy { TextKitTokenState(manager, configuration) }
 
     /**
-     * The text typed after the mention trigger char (e.g. after `@`), or null when the mention
-     * picker is not active. Observe this to show a mention popup and filter its candidates; it
-     * updates on every keystroke and is cleared once the query is committed ([selectMention]),
-     * dismissed ([dismissMention]) or invalidated (caret leaves the query, whitespace typed, …).
+     * The text typed after the active trigger char (e.g. after `@`/`#`/`/`), or null when no picker
+     * is active. Observe this together with [activeTrigger] to show a popup and filter candidates; it
+     * updates on every keystroke and is cleared once committed ([selectToken]), dismissed
+     * ([dismissToken]) or invalidated (caret leaves the query, whitespace typed, …).
      */
-    val mentionQuery: String? get() = mentionState.query
+    val tokenQuery: String? get() = tokenState.query
+
+    /** The trigger currently being composed, or null. Drives which candidate set the popup shows. */
+    val activeTrigger: TextKitTrigger? get() = tokenState.activeTrigger
 
     val composition get() = textFieldValue.composition
 
@@ -279,6 +284,26 @@ class TextKitState(
             TextStyleMark(TextStyleAttrs(fontSize = fontSize, color = color)),
             selected = true
         )
+
+    /**
+     * Applies a heading of [level] (1..6) by setting the matching heading font size (see
+     * [HeadingLevelsValues]); any other [level] resets to the configured body [TextKitConfiguration.fontSize].
+     * Over a selection it restyles that text; with a collapsed caret it stores the style so the next
+     * typed characters inherit it (matching how the other mark toggles behave). Returns whether the
+     * document changed.
+     */
+    fun applyHeading(level: Int): Boolean {
+        val fontSize = when (level) {
+            HeadingLevels.H1 -> HeadingLevelsValues.H1
+            HeadingLevels.H2 -> HeadingLevelsValues.H2
+            HeadingLevels.H3 -> HeadingLevelsValues.H3
+            HeadingLevels.H4 -> HeadingLevelsValues.H4
+            HeadingLevels.H5 -> HeadingLevelsValues.H5
+            HeadingLevels.H6 -> HeadingLevelsValues.H6
+            else -> configuration.fontSize
+        }
+        return applyTextStyle(fontSize = fontSize, color = null)
+    }
 
     /**
      * Toggles an ordered (numbered) list over the paragraph(s) the current selection touches,
@@ -416,7 +441,7 @@ class TextKitState(
      * Sets [url] on [range], replacing the range's visible text with [newText] first when it
      * changed, and collapses the caret at the end of the resulting text. Meant for a link popup
      * where both the text and the URL are editable — including adding a link to a fresh selection
-     * (leave [newText] as the selected text and it only attaches the URL).
+     * (leave [newText] as the selected text, and it only attaches the URL).
      *
      * When [newText] equals the current text over [range], the swap is skipped and only [updateLink]
      * runs, so per-character marks in the range survive (a full text replace would flatten them to
@@ -616,7 +641,7 @@ class TextKitState(
     /**
      * Entry point for every text-field edit; wire it to the field's `onValueChange`. It diffs
      * [newTextFieldValue] against the current value and routes the change to the piece table as an
-     * insert, a delete, a clipboard replace, or a pure selection move, keeping marks, decorators and
+     * insert, a deleted, a clipboard replace, or a pure selection move, keeping marks, decorators and
      * the rendered [textFieldValue] consistent.
      */
     fun onTextFieldChange(newTextFieldValue: TextFieldValue = prevTextFieldValue) {
@@ -633,15 +658,15 @@ class TextKitState(
                 // Update selection
                 textFieldValue = prevTextFieldValue
                 selection = textFieldValue.selection
-                // Atomicity: a collapsed caret may not rest inside a mention — snap it out.
-                val snapped = mentionState.snapCaretOutOfMention(selection)
+                // Atomicity: a collapsed caret may not rest inside an atomic token — snap it out.
+                val snapped = tokenState.snapCaretOutOfToken(selection)
                 if (snapped != selection) {
                     selection = snapped
                     textFieldValue = textFieldValue.copy(selection = snapped)
                 }
                 readSelectionContext()
                 checkDecorator(textFieldValue.selection.start, textFieldValue.selection.end)
-                mentionState.refreshQuery(textFieldValue.text, selection)
+                tokenState.refreshQuery(textFieldValue.text, selection)
             } else {
                 // Replacing the same length of characters using the clipboard
                 updateAnnotatedString(prevTextFieldValue.selection)
@@ -656,56 +681,96 @@ class TextKitState(
         if (result) {
             selection = range
             updateAnnotatedString(selection)
-            mentionState.refreshQuery(textFieldValue.text, selection)
+            tokenState.refreshQuery(textFieldValue.text, selection)
             // Editing shifts offsets, so a remembered selection is no longer valid.
             lastRangeSelection = TextRange.Zero
         }
     }
 
     private fun handleRemovingText() {
-        // A partial deletion of a mention (e.g. Backspace at its trailing edge) must remove the
-        // whole atomic mention instead of clipping a character off its label.
-        if (handleAtomicMentionDeletion()) return
+        // A partial deletion of an atomic token (e.g. Backspace at its trailing edge) must remove the
+        // whole token instead of clipping a character off its label.
+        if (handleAtomicTokenDeletion()) return
         val action = createRemoveAction()
         val (result, range) = TextTransaction.onTextUpdated(action, manager)
         if (result) {
             selection = range
             updateAnnotatedString(selection)
-            mentionState.refreshQuery(textFieldValue.text, selection)
+            tokenState.refreshQuery(textFieldValue.text, selection)
             // Editing shifts offsets, so a remembered selection is no longer valid.
             lastRangeSelection = TextRange.Zero
         }
     }
 
-    // region Mentions — thin glue over TextKitMentionState (which owns the logic)
+    // region Trigger tokens — thin glue over TextKitTokenState (which owns the logic)
 
-    /** Dismisses the mention popup without inserting anything (e.g. on Escape or outside tap). */
-    fun dismissMention() = mentionState.dismiss()
+    /** Dismisses the token popup without inserting anything (e.g. on Escape or outside tap). */
+    fun dismissToken() = tokenState.dismiss()
 
     /**
-     * Commits the active mention: replaces the `@query` the user typed with an atomic mention node
-     * for ([id], [label]) and drops the caret right after it. No-op when no mention is being composed.
-     * The mention inherits the marks active at the caret ([lastMarks]).
+     * Commits the active token: replaces the `<char>query` the user typed for ([id], [label]) and
+     * drops the caret right after it. No-op when no token is being composed. For an atomic trigger
+     * (`@`, `#`) this inserts a token node inheriting the marks active at the caret ([lastMarks]); for
+     * an ephemeral trigger (`/`) it inserts the label as plain text.
      */
-    fun selectMention(id: String, label: String) {
-        val caret = mentionState.commitSelection(id, label, selection, lastMarks) ?: return
+    fun selectToken(id: String, label: String) {
+        val caret = tokenState.commitSelection(id, label, selection, lastMarks) ?: return
         selection = caret
         updateAnnotatedString(caret)
     }
 
     /**
      * Bounding box (in the text field's local coordinates) of the active trigger char, used to
-     * anchor the mention popup. Null when no mention is being composed or the layout is not ready.
+     * anchor the popup. Null when no token is being composed or the layout is not ready.
      */
-    fun mentionAnchorBounds(): Rect? = mentionState.anchorBounds(textLayoutResult)
+    fun tokenAnchorBounds(): Rect? = tokenState.anchorBounds(textLayoutResult)
+
+    /** Backward-compatible alias of [dismissToken]. */
+    fun dismissMention() = dismissToken()
+
+    /** Backward-compatible alias of [selectToken]. */
+    fun selectMention(id: String, label: String) = selectToken(id, label)
+
+    /** Backward-compatible alias of [tokenAnchorBounds]. */
+    fun mentionAnchorBounds(): Rect? = tokenAnchorBounds()
 
     /**
-     * When the pending deletion clips a mention rather than removing it whole, removes the whole
-     * mention through the engine and syncs the view. Returns true when it handled the deletion, so
-     * the normal removal path is skipped.
+     * Runs a slash [command] (or any ephemeral-trigger command): removes the `/query` the user typed
+     * and then invokes [TextKitCommand.onSelect] at the resulting caret. No-op when no ephemeral
+     * command trigger is active. Use this from a slash-command popup (see `TextKitSlashCommandPopup`).
      */
-    private fun handleAtomicMentionDeletion(): Boolean {
-        val caret = mentionState.deletePartialMention(textFieldValue.text, prevTextFieldValue.text)
+    fun runCommand(command: TextKitCommand) {
+        val caret = tokenState.commitCommand(selection) ?: return
+        selection = caret
+        updateAnnotatedString(caret)
+        command.onSelect(this)
+    }
+
+    /**
+     * Inserts [text] as plain text at the current caret (inheriting the marks active there),
+     * collapsing the caret right after it. Handy for custom slash commands (e.g. inserting a date or
+     * snippet) via [TextKitCommand.custom].
+     */
+    fun insertText(text: String) {
+        if (text.isEmpty()) return
+        val caret = manager.insertToken(
+            nodeType = null,
+            id = "",
+            label = text,
+            replaceRange = TextRange(selection.min, selection.max),
+            marks = lastMarks
+        )
+        selection = caret
+        updateAnnotatedString(caret)
+    }
+
+    /**
+     * When the pending deletion clips an atomic token rather than removing it whole, removes the
+     * whole token through the engine and syncs the view. Returns true when it handled the deletion,
+     * so the normal removal path is skipped.
+     */
+    private fun handleAtomicTokenDeletion(): Boolean {
+        val caret = tokenState.deletePartialToken(textFieldValue.text, prevTextFieldValue.text)
             ?: return false
         selection = caret
         updateAnnotatedString(caret)
@@ -908,12 +973,19 @@ class TextKitState(
 
     companion object {
 
-        val Saver = Saver<TextKitState, Any>(
+        /**
+         * Builds the [rememberSaveable] saver for a [TextKitState]. The [configuration] (colors,
+         * sizes and the full set of triggers) is supplied by the caller on every recreation —
+         * including after process death — so it is taken live from here instead of being serialized
+         * and rebuilt. This keeps the triggers fully dynamic: whatever the caller configured (custom
+         * subclasses included) is restored as-is, with no hardcoded per-char reconstruction. Only the
+         * editing state (text, selection, document, viewer flag) is persisted.
+         */
+        fun saver(configuration: TextKitConfiguration) = Saver<TextKitState, Any>(
             save = {
                 arrayListOf(
                     save(it.textFieldValue.text),
                     save(it.selection, TextRangeSaver, this),
-                    save(it.configuration, ConfigurationSaver, this),
                     save(it.toJson()),
                     save(it.isViewer),
                 )
@@ -925,11 +997,10 @@ class TextKitState(
                     text = restore(list[0])!!,
                     selection = restore(list[1], TextRangeSaver)!!
                 )
-                val config: TextKitConfiguration = restore(list[2], ConfigurationSaver)!!
-                val json: String = restore(list[3])!!
-                val isViewer: Boolean = restore(list[4])!!
+                val json: String = restore(list[2])!!
+                val isViewer: Boolean = restore(list[3])!!
 
-                val state = TextKitState(json, isViewer, config)
+                val state = TextKitState(json, isViewer, configuration)
                     .also { state ->
                         state.textFieldValue = textFieldValue
                         state.updateAnnotatedString(state.textFieldValue.selection)
@@ -950,39 +1021,6 @@ class TextKitState(
                 alignment = LineHeightStyle.Alignment.Center,
                 trim = LineHeightStyle.Trim.None,
             ),
-        )
-
-        private val ConfigurationSaver = Saver<TextKitConfiguration, Any>(
-            save = {
-                val mention = it.mentionTrigger
-                arrayListOf(
-                    save(it.highlightColor),
-                    save(it.linkColor),
-                    save(it.textColor),
-                    save(it.fontSize),
-                    // Persist the mention trigger by its presence + color (its char is fixed by the
-                    // TextKitMentionTrigger type) so mentions keep working across process death.
-                    save(mention != null),
-                    save(mention?.color ?: Color(0xFF1B75D0))
-                )
-            },
-            restore = {
-                @Suppress("UNCHECKED_CAST")
-                val list = it as List<Any>
-                val hasMention: Boolean = restore(list[4])!!
-                val mentionColor: Color = restore(list[5])!!
-                TextKitConfiguration(
-                    highlightColor = restore(list[0])!!,
-                    linkColor = restore(list[1])!!,
-                    textColor = restore(list[2])!!,
-                    fontSize = restore(list[3])!!,
-                    triggers = if (hasMention) {
-                        setOf(TextKitTrigger.TextKitMentionTrigger(mentionColor))
-                    } else {
-                        emptySet()
-                    }
-                )
-            }
         )
 
         private val TextRangeSaver = Saver<TextRange, Any>(

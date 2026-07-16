@@ -433,7 +433,7 @@ internal abstract class RichTextEditorBasePieceTable :
                         length = pieceLength,
                         marks = model.piece.marks,
                         decorator = model.piece.decorator,
-                        mention = model.piece.mention,
+                        token = model.piece.token,
                         isLineBreak = pieceText.isLineBreak(),
                         endsWithLineBreak = pieceText.endsWithLineBreak()
                     )

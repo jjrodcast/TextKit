@@ -45,9 +45,10 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                 length = headLength,
                 marks = newOriginalPiece.marks,
                 decorator = newOriginalPiece.decorator,
-                // Edits are mention-boundary aligned, so a mention piece is never split: headLength
-                // is either 0 (dropped) or its full length, so carrying the mention here is safe.
-                mention = newOriginalPiece.mention,
+                // Edits are token-boundary aligned, so an atomic token piece is never split:
+                // headLength is either 0 (dropped) or its full length, so carrying the token here is
+                // safe.
+                token = newOriginalPiece.token,
                 isLineBreak = newOriginalPiece.isLineBreak,
                 endsWithLineBreak = charAtEndIsLineBreak(newOriginalPiece.source, newOriginalPiece.offset, headLength)
             )
@@ -59,7 +60,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                     length = model.text.length,
                     marks = model.piece.marks,
                     decorator = model.piece.decorator,
-                    mention = model.piece.mention,
+                    token = model.piece.token,
                     isLineBreak = model.text.isLineBreak(),
                     endsWithLineBreak = model.text.endsWithLineBreak()
                 )
@@ -122,7 +123,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                 length = leftLength,
                 marks = initialPiece.marks,
                 decorator = initialPiece.decorator,
-                mention = initialPiece.mention,
+                token = initialPiece.token,
                 isLineBreak = leftLength > 0 && initialPiece.isLineBreak,
                 endsWithLineBreak = charAtEndIsLineBreak(initialPiece.source, initialPiece.offset, leftLength)
             )
@@ -134,7 +135,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                 length = rightLength,
                 marks = finalPiece.marks,
                 decorator = finalPiece.decorator,
-                mention = finalPiece.mention,
+                token = finalPiece.token,
                 isLineBreak = rightLength > 0 && finalPiece.isLineBreak,
                 // Right piece shares the same buffer end as finalPiece.
                 endsWithLineBreak = rightLength > 0 && finalPiece.endsWithLineBreak
@@ -158,10 +159,10 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
         piece.offset + piece.length == bufferOffset &&
         piece.hasSameMarksWith(model.piece) && !isParagraph &&
         piece.decorator == null && !model.isDecorator &&
-        // A mention is atomic: never absorb typed text into it, and never grow it by appending
-        // another piece — both would silently drop characters on serialization (which reads the
-        // stored label, not the piece text).
-        !piece.isMention && !model.piece.isMention
+        // An atomic token is indivisible: never absorb typed text into it, and never grow it by
+        // appending another piece — both would silently drop characters on serialization (which
+        // reads the stored label, not the piece text).
+        !piece.isToken && !model.piece.isToken
 
     private fun RichPiece.isParagraph(addedText: StringBuilder, originalDocumentText: String): Boolean {
         val text = if (source == Source.ADDED) {
@@ -186,7 +187,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
             length = remainingLength,
             marks = remainingMarks,
             decorator = originalPiece.decorator,
-            mention = originalPiece.mention,
+            token = originalPiece.token,
             isLineBreak = remainingText.isLineBreak(),
             endsWithLineBreak = remainingText.endsWithLineBreak()
         )
