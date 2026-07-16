@@ -16,30 +16,62 @@ import com.jjrodcast.textkit.editor.utils.DocumentUtils
 import com.jjrodcast.textkit.ui.TextKitEditor
 import com.jjrodcast.textkit.ui.TextKitFormattingBar
 import com.jjrodcast.textkit.ui.TextKitLinkPopup
-import com.jjrodcast.textkit.ui.TextKitMentionPopup
+import com.jjrodcast.textkit.ui.TextKitSlashCommandPopup
+import com.jjrodcast.textkit.ui.TextKitTokenPopup
 import com.jjrodcast.textkit.ui.TextKitScreen
-import com.jjrodcast.textkit.ui.model.TextKitMentionSuggestion
+import com.jjrodcast.textkit.ui.model.TextKitCommand
+import com.jjrodcast.textkit.ui.model.TextKitTokenSuggestion
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
 
+// Candidates for the '@' mention trigger — persisted as atomic mention chips.
 private val sampleUsers = listOf(
-    TextKitMentionSuggestion(id = "111", label = "Jorge Rodriguez"),
-    TextKitMentionSuggestion(id = "222", label = "Ada Lovelace"),
-    TextKitMentionSuggestion(id = "333", label = "Alan Turing"),
-    TextKitMentionSuggestion(id = "444", label = "Grace Hopper"),
-    TextKitMentionSuggestion(id = "555", label = "Margaret Hamilton"),
+    TextKitTokenSuggestion(id = "111", label = "Jorge Rodriguez"),
+    TextKitTokenSuggestion(id = "222", label = "Ada Lovelace"),
+    TextKitTokenSuggestion(id = "333", label = "Alan Turing"),
+    TextKitTokenSuggestion(id = "444", label = "Grace Hopper"),
+    TextKitTokenSuggestion(id = "555", label = "Margaret Hamilton"),
+)
+
+// Candidates for the '#' hashtag trigger — persisted as atomic hashtag chips.
+private val sampleTags = listOf(
+    TextKitTokenSuggestion(id = "1", label = "kotlin"),
+    TextKitTokenSuggestion(id = "2", label = "compose"),
+    TextKitTokenSuggestion(id = "3", label = "multiplatform"),
+    TextKitTokenSuggestion(id = "4", label = "android"),
+    TextKitTokenSuggestion(id = "5", label = "ios"),
+)
+
+// Commands for the '/' slash trigger — ephemeral actions (no persisted token). Built-in block
+// commands (heading/list) plus a custom callback that inserts text.
+private val sampleCommands = listOf(
+    TextKitCommand.heading(1),
+    TextKitCommand.heading(2),
+    TextKitCommand.heading(3),
+    TextKitCommand.bulletList(),
+    TextKitCommand.orderedList(),
+    TextKitCommand.custom(id = "cmd-date", label = "Insert date") {
+        it.insertText("2026-07-15")
+    },
+    TextKitCommand.custom(id = "cmd-sig", label = "Insert signature") {
+        it.insertText("Best regards,")
+    },
 )
 
 @Composable
 fun TextKitSample() {
     val barState = rememberTextKitFormattingBarState()
-    // Enable the mention flow: typing '@' opens the mention popup.
+    // Enable the trigger flows: '@' mentions, '#' hashtags (atomic chips) and '/' slash commands
+    // (ephemeral text insertion).
     val configuration = remember {
         createTextKitConfiguration {
             addTrigger { TextKitTrigger.TextKitMentionTrigger() }
+            addTrigger { TextKitTrigger.TextKitHashtagTrigger() }
+            addTrigger { TextKitTrigger.TextKitSlashTrigger() }
         }
     }
-    val state = rememberTextKitState(json = DocumentUtils.complexJsonV2, configuration = configuration)
+    val state =
+        rememberTextKitState(json = DocumentUtils.complexJsonV2, configuration = configuration)
 
     LaunchedEffect(state.lastMarks, state.lastListItem) {
         barState.syncFrom(state.lastMarks, state.lastListItem)
@@ -74,10 +106,15 @@ fun TextKitSample() {
                 },
                 onRemove = { link -> state.removeLink(link.range) },
             )
-            TextKitMentionPopup(
-                state = state,
-                candidates = sampleUsers,
-            )
+            // Atomic-token popup for '@' mentions and '#' hashtags (candidates by active trigger).
+            TextKitTokenPopup(state = state) { trigger ->
+                when (trigger) {
+                    is TextKitTrigger.TextKitHashtagTrigger -> sampleTags
+                    else -> sampleUsers
+                }
+            }
+            // Slash-command popup for '/': runs actions (heading/list/custom) instead of inserting.
+            TextKitSlashCommandPopup(state = state, commands = sampleCommands)
         }
     }
 }

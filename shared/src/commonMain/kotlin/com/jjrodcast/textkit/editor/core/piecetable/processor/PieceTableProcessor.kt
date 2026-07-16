@@ -22,9 +22,9 @@ internal object PieceTableProcessor {
         val rightPiece = rightModel.piece
         val centralPiece = centralModel.piece
         return if (rightPiece.source == centralPiece.source) {
-            if (rightPiece.isDecorator || rightPiece.isMention || centralPiece.isMention) {
-                // A mention is atomic — never coalesce it with a neighbor; just (re)mark the central
-                // piece, exactly like decorators are kept out of merges.
+            if (rightPiece.isDecorator || rightPiece.isToken || centralPiece.isToken) {
+                // An atomic token is indivisible — never coalesce it with a neighbor; just (re)mark
+                // the central piece, exactly like decorators are kept out of merges.
                 getCentralPieceTransaction(centralModel, indexOfCentralPiece, offset, length, marks)
             } else if (centralModel.isLastOnParagraph || rightPiece.offset < centralPiece.offset) {
                 getCentralPieceTransaction(centralModel, indexOfCentralPiece, offset, length, marks)
@@ -104,9 +104,9 @@ internal object PieceTableProcessor {
         val leftPiece = leftModel.piece
         val centralPiece = centralModel.piece
         return if (leftPiece.source == centralPiece.source) {
-            if (leftPiece.isDecorator || leftPiece.isMention || centralPiece.isMention) {
-                // A mention is atomic — never coalesce it with a neighbor; just (re)mark the central
-                // piece, exactly like decorators are kept out of merges.
+            if (leftPiece.isDecorator || leftPiece.isToken || centralPiece.isToken) {
+                // An atomic token is indivisible — never coalesce it with a neighbor; just (re)mark
+                // the central piece, exactly like decorators are kept out of merges.
                 getCentralPieceTransaction(centralModel, indexOfCentralPiece, offset, length, marks)
             } else if (leftModel.isLastOnParagraph || centralPiece.offset < leftPiece.offset) {
                 getCentralPieceTransaction(centralModel, indexOfCentralPiece, offset, length, marks)
@@ -359,11 +359,12 @@ internal object PieceTableProcessor {
         val rightPiece = rightModel.piece
         val centralPiece = centralModel.piece
 
-        // A mention is atomic: never coalesce it with its neighbors. This path is only reached when
-        // the neighbors already carry the target marks, so it is enough to (re)mark the central piece
-        // on its OWN range. Merging would feed a left-spanning offset into getCentralPieceTransaction
-        // and compute a negative buffer offset (crash) plus a piece that swallows the neighbor's text.
-        if (leftPiece.isMention || centralPiece.isMention || rightPiece.isMention) {
+        // An atomic token is indivisible: never coalesce it with its neighbors. This path is only
+        // reached when the neighbors already carry the target marks, so it is enough to (re)mark the
+        // central piece on its OWN range. Merging would feed a left-spanning offset into
+        // getCentralPieceTransaction and compute a negative buffer offset (crash) plus a piece that
+        // swallows the neighbor's text.
+        if (leftPiece.isToken || centralPiece.isToken || rightPiece.isToken) {
             return getCentralPieceTransaction(
                 centralModel,
                 indexOfCentralPiece,

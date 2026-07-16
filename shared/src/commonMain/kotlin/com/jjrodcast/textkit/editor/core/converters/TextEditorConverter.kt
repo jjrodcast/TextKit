@@ -12,8 +12,9 @@ import com.jjrodcast.textkit.editor.core.parser.Heading
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevels
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevelsValues
 import com.jjrodcast.textkit.editor.core.parser.ListItem
+import com.jjrodcast.textkit.editor.core.parser.HashtagType
+import com.jjrodcast.textkit.editor.core.parser.InlineToken
 import com.jjrodcast.textkit.editor.core.parser.Mark
-import com.jjrodcast.textkit.editor.core.parser.Mention
 import com.jjrodcast.textkit.editor.core.parser.MentionType.DEFAULT_MENTION_CHAR
 import com.jjrodcast.textkit.editor.core.parser.OrderedList
 import com.jjrodcast.textkit.editor.core.parser.Paragraph
@@ -24,6 +25,7 @@ import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
+import com.jjrodcast.textkit.editor.core.piecetable.models.RichToken
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import com.jjrodcast.textkit.editor.models.TextKitConfiguration
@@ -220,6 +222,18 @@ internal object TextEditorConverter {
         }
     }
 
+    /**
+     * Resolves the trigger char used to render an atomic token's visible label. Always prefers the
+     * char from the [configuration]'s trigger for [type]; the `DEFAULT_*_CHAR` constants are only a
+     * fallback so a document with a `hashtag`/`mention` node whose trigger is not configured still
+     * renders with a sensible prefix.
+     */
+    private fun triggerCharFor(type: String, configuration: TextKitConfiguration): Char =
+        configuration.triggerForType(type)?.triggerKey ?: when (type) {
+            HashtagType.Hashtag -> HashtagType.DEFAULT_HASHTAG_CHAR
+            else -> DEFAULT_MENTION_CHAR
+        }
+
     private fun BaseText.getTextContentWithMarkers(
         decorator: TextDecoratorModel? = null,
         configuration: TextKitConfiguration,
@@ -244,18 +258,19 @@ internal object TextEditorConverter {
                 )
             }
 
-            is Mention -> {
-                // Atomic inline node: its visible text is "<triggerKey><label>" and its identity
-                // (id + label) rides on the piece so it can be serialized back to a `mention` node.
-                // Marks apply to the whole chip, resolved the same way as a Text node's marks.
+            is InlineToken -> {
+                // Atomic inline node (mention, hashtag, …): its visible text is
+                // "<triggerKey><label>" and its identity (type + id + label) rides on the piece so it
+                // can be serialized back to the right node. Marks apply to the whole chip, resolved
+                // the same way as a Text node's marks. One branch covers every atomic token type.
                 val newMarks = recreateMarks(marks, configuration, headingLevel)
                 val newDecorator = decorator as? TextDecoratorModel.BlockquoteDecorator
-                val triggerChar = configuration.mentionTrigger?.triggerKey ?: DEFAULT_MENTION_CHAR
+                val triggerChar = triggerCharFor(type, configuration)
                 items.add(
                     TextEditorModel.create(
                         text = triggerChar + (attrs.label ?: EMPTY),
                         marks = newMarks,
-                        mention = attrs,
+                        token = RichToken(type, attrs),
                         decorator = newDecorator
                     )
                 )

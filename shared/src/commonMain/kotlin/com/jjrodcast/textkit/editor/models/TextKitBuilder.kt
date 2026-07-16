@@ -37,6 +37,11 @@ class TextKitBuilder {
 
     fun build(): TextKitConfiguration {
         require(fontSize > 0) { "Font size cannot be less than 1" }
+        // Trigger detection resolves a trigger by its char, so each char must be unique.
+        val duplicateKeys = triggers.groupBy { it.triggerKey }.filterValues { it.size > 1 }.keys
+        require(duplicateKeys.isEmpty()) {
+            "Duplicate trigger characters registered: $duplicateKeys"
+        }
         return TextKitConfiguration(
             highlightColor,
             linkColor,

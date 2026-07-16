@@ -3,10 +3,11 @@ package com.jjrodcast.textkit.editor.core
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.Mark
-import com.jjrodcast.textkit.editor.core.parser.MentionAttrs
 import com.jjrodcast.textkit.editor.core.parser.MentionType
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
+import com.jjrodcast.textkit.editor.core.parser.TokenAttrs
+import com.jjrodcast.textkit.editor.core.piecetable.models.RichToken
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorSelectedMark
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
@@ -98,9 +99,46 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
     fun onDecoratorChange(offset: Int) = transaction.onDecoratorChange(offset)
 
     /**
-     * Inserts an atomic mention, replacing [replaceRange] (typically the `@query` text the user was
-     * typing). The inserted piece's visible text is `<triggerKey><label>` and it carries the
-     * mention's id/label so it serializes back to a `mention` node.
+     * Inserts a trigger token, replacing [replaceRange] (typically the `<char>query` text the user
+     * was typing).
+     *
+     * - When [nodeType] is non-null (an atomic token like `"mention"`/`"hashtag"`) the inserted
+     *   piece's visible text is `<triggerKey><label>` and it carries the token's type/id/label so it
+     *   serializes back to that node.
+     * - When [nodeType] is null (an ephemeral command like `/`) the [label] is inserted as plain text
+     *   and nothing is persisted as a token.
+     *
+     * @return the collapsed [TextRange] where the caret should land (right after the inserted text).
+     */
+    fun insertToken(
+        nodeType: String?,
+        id: String,
+        label: String,
+        replaceRange: TextRange,
+        marks: Set<Mark> = emptySet()
+    ): TextRange {
+        val text = if (nodeType != null) {
+            val triggerChar = configuration.triggerForType(nodeType)?.triggerKey
+                ?: MentionType.DEFAULT_MENTION_CHAR
+            triggerChar + label
+        } else {
+            // Ephemeral command: no trigger char, no persisted token — just the plain-text result.
+            label
+        }
+        val model = TextEditorModel.create(
+            text = text,
+            marks = marks,
+            token = nodeType?.let { RichToken(type = it, attrs = TokenAttrs(id = id, label = label)) }
+        )
+        val start = replaceRange.min
+        val length = replaceRange.length
+        if (length > 0) transaction.update(start, length, model) else transaction.insert(model, start)
+        return TextRange(start + text.length)
+    }
+
+    /**
+     * Inserts an atomic mention. Thin wrapper over [insertToken] with the `mention` node type, kept
+     * for a convenient, type-specific API.
      *
      * @return the collapsed [TextRange] where the caret should land (right after the mention).
      */
@@ -109,19 +147,7 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
         label: String,
         replaceRange: TextRange,
         marks: Set<Mark> = emptySet()
-    ): TextRange {
-        val triggerChar = configuration.mentionTrigger?.triggerKey ?: MentionType.DEFAULT_MENTION_CHAR
-        val mentionText = triggerChar + label
-        val model = TextEditorModel.create(
-            text = mentionText,
-            marks = marks,
-            mention = MentionAttrs(id = id, label = label)
-        )
-        val start = replaceRange.min
-        val length = replaceRange.length
-        if (length > 0) transaction.update(start, length, model) else transaction.insert(model, start)
-        return TextRange(start + mentionText.length)
-    }
+    ): TextRange = insertToken(MentionType.Mention, id, label, replaceRange, marks)
 
     /**
      * Deletes the characters in [range]. Used to remove an atomic mention as a whole. Returns the

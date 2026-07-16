@@ -10,16 +10,20 @@ import kotlinx.serialization.Transient
  *
  * A mention can carry inline [marks] (bold, italic, color, …) just like a [Text] node; they apply to
  * the whole atomic chip. Polymorphism is handled by the default sealed-class machinery of
- * [BaseText] (discriminator `"type"`), same as [Text]/[HardBreak].
+ * [BaseText] (discriminator `"type"`), same as [Text]/[HardBreak]. It is one of the atomic trigger
+ * tokens (see [InlineToken]).
  */
 @Serializable
 @SerialName(MentionType.Mention)
 internal data class Mention(
-    val attrs: MentionAttrs,
-    val marks: Set<Mark> = emptySet(),
-) : BaseText() {
+    override val attrs: TokenAttrs,
+    override val marks: Set<Mark> = emptySet(),
+) : BaseText(), InlineToken {
     @Transient
     override val key: String = MentionType.Mention
+
+    @Transient
+    override val type: String = MentionType.Mention
 }
 
 internal object MentionType {

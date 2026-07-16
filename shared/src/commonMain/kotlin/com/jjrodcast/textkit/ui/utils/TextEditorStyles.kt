@@ -33,15 +33,15 @@ internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): Sp
             )
         )
     )
-    if (!isMention) return base
-    // A mention renders as an accented chip: it keeps whatever its marks imply (bold, italic,
-    // underline, strike, size) but overlays the configured mention color + translucent background,
-    // and defaults to a medium weight when it is not explicitly bold.
-    val mentionColor = configuration.mentionTrigger?.color ?: configuration.linkColor
+    if (!isToken) return base
+    // An atomic token (mention, hashtag, …) renders as an accented chip: it keeps whatever its marks
+    // imply (bold, italic, underline, strike, size) but overlays the color configured for its trigger
+    // + translucent background, and defaults to a medium weight when it is not explicitly bold.
+    val tokenColor = configuration.triggerForType(tokenType)?.color ?: configuration.linkColor
     return base.copy(
-        color = mentionColor,
+        color = tokenColor,
         fontWeight = base.fontWeight ?: FontWeight.Medium,
-        background = mentionColor.copy(alpha = 0.12f)
+        background = tokenColor.copy(alpha = 0.12f)
     )
 }
 

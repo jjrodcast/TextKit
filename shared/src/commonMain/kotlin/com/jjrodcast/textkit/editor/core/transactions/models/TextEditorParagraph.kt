@@ -2,26 +2,34 @@ package com.jjrodcast.textkit.editor.core.transactions.models
 
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.Mark
-import com.jjrodcast.textkit.editor.core.parser.MentionAttrs
+import com.jjrodcast.textkit.editor.core.parser.MentionType
+import com.jjrodcast.textkit.editor.core.piecetable.models.RichToken
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 
 class TextEditorParagraph(val children: List<TextEditorItem>)
 
-class TextEditorItem(
+class TextEditorItem internal constructor(
     val text: String,
     val start: Int,
     val end: Int,
     val decorator: TextDecoratorModel? = null,
-    val mention: MentionAttrs? = null,
+    internal val token: RichToken? = null,
     val marks: List<Mark>
 ) {
-    val isMention get() = mention != null
+    /** True for any atomic trigger token (mention, hashtag, …). */
+    val isToken get() = token != null
+
+    /** The persisted node type of this token (`"mention"`, `"hashtag"`, …), or null when not a token. */
+    val tokenType get() = token?.type
+
+    /** True specifically for a mention token. */
+    val isMention get() = token?.type == MentionType.Mention
 
     companion object {
         internal fun from(model: TextEditorModel) = TextEditorItem(
             text = model.text,
             decorator = model.piece.decorator,
-            mention = model.piece.mention,
+            token = model.piece.token,
             start = model.offsetInDocument,
             end = model.offsetInDocument + model.piece.length,
             marks = model.piece.marks.toList()
