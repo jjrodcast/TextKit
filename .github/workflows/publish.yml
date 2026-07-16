@@ -1,0 +1,46 @@
+name: Publish to Maven Central
+
+on:
+  # Publish when a GitHub Release is published from the Releases page
+  release:
+    types: [published]
+  # Allow manual runs from the Actions tab
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión a publicar (ej. 1.0.0-alpha01). Vacío = usar el tag seleccionado'
+        required: false
+
+jobs:
+  publish:
+    name: Publish :shared to Maven Central
+    # macOS runner so all KMP targets (incl. iOS) can be built and published
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          V="${{ inputs.version }}"
+          echo "value=${V:-${GITHUB_REF_NAME#v}}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Maven Central
+        run: ./gradlew :shared:publishToMavenCentral -PlibVersion=${{ steps.version.outputs.value }} --no-configuration-cache --stacktrace
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
