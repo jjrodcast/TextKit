@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.em
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
+import com.jjrodcast.textkit.editor.core.history.EditKind
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevels
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevelsValues
@@ -114,6 +115,21 @@ class TextKitState(
 
     internal var selection by mutableStateOf(TextRange.Zero)
         private set
+
+    /** Whether an [undo] is available. Observable so the formatting bar's undo button can enable/disable. */
+    var canUndo by mutableStateOf(false)
+        private set
+
+    /** Whether a [redo] is available. Observable so the formatting bar's redo button can enable/disable. */
+    var canRedo by mutableStateOf(false)
+        private set
+
+    /**
+     * Re-entrancy guard for [recordBefore]. A compound action (e.g. a link text+URL edit that swaps
+     * text and then applies a link) calls other recording methods internally; only the outermost call
+     * should capture a restore point, so the whole action is a single undo step.
+     */
+    private var historyDepth = 0
 
     /**
      * Marks active at the collapsed caret, captured when the selection moves. Text typed next
@@ -221,6 +237,75 @@ class TextKitState(
         val text = manager.text
         textFieldValue = textFieldValue.copy(text = text, selection = TextRange.Zero)
         updateAnnotatedString(textFieldValue.selection)
+        syncHistoryAvailability()
+    }
+
+    /**
+     * Reverts the last edit (typing, deletion, formatting, list toggle, token insertion, …) and
+     * restores the caret to where it was before that edit. No-op — returns false — when there is
+     * nothing to undo. Wire it to a toolbar button ([canUndo]) or a keyboard shortcut (Ctrl/Cmd+Z).
+     */
+    fun undo(): Boolean {
+        val restored = manager.undo(selection) ?: return false
+        applyRestoredHistory(restored)
+        return true
+    }
+
+    /**
+     * Reapplies the last undone edit and restores its caret. No-op — returns false — when there is
+     * nothing to redo. Wire it to a toolbar button ([canRedo]) or a keyboard shortcut
+     * (Ctrl/Cmd+Shift+Z, or Ctrl+Y).
+     */
+    fun redo(): Boolean {
+        val restored = manager.redo(selection) ?: return false
+        applyRestoredHistory(restored)
+        return true
+    }
+
+    /** Re-renders the field after an undo/redo restore and re-syncs the caret-dependent UI state. */
+    private fun applyRestoredHistory(restoredSelection: TextRange) {
+        // A restore can shrink or grow the document; any query/token popup that was open no longer
+        // matches the restored text, and a remembered range is stale.
+        tokenState.dismiss()
+        lastRangeSelection = TextRange.Zero
+        selection = restoredSelection
+        updateAnnotatedString(restoredSelection)
+        readSelectionContext()
+        syncHistoryAvailability()
+    }
+
+    private fun syncHistoryAvailability() {
+        canUndo = manager.canUndo
+        canRedo = manager.canRedo
+    }
+
+    /**
+     * Runs a document-mutating [block] as one undo step. Captures a restore point (the pre-edit
+     * state + current [selection]) and, if [block] reports a change, commits it with [coalesceKey]
+     * (see [EditorHistoryManager][com.jjrodcast.textkit.editor.core.history.EditorHistoryManager]);
+     * [breakAfter] then ends the coalescing run so the next edit starts fresh.
+     *
+     * Nested calls (a compound action calling other recording methods) reuse the outermost restore
+     * point via [historyDepth], so the whole action is a single undo step.
+     */
+    private inline fun recordBefore(
+        coalesceKey: Any? = null,
+        breakAfter: Boolean = true,
+        block: () -> Boolean
+    ): Boolean {
+        val point = if (historyDepth == 0) manager.captureHistoryPoint(selection) else null
+        historyDepth++
+        val changed = try {
+            block()
+        } finally {
+            historyDepth--
+        }
+        if (changed && point != null) {
+            manager.pushHistory(point, coalesceKey)
+            if (breakAfter) manager.breakHistoryCoalescing()
+            syncHistoryAvailability()
+        }
+        return changed
     }
 
     /**
@@ -394,8 +479,8 @@ class TextKitState(
         previousMarks: TextEditorSelectedMark,
         currentMarks: TextEditorSelectedMark,
         transactionType: TextEditorTransactionType
-    ): Boolean {
-        val (updated, selection) = manager.updateDocument(
+    ): Boolean = recordBefore(coalesceKey = null) {
+        val (updated, resultSelection) = manager.updateDocument(
             selection,
             previousMarks,
             currentMarks,
@@ -403,12 +488,12 @@ class TextKitState(
         )
 
         if (updated) {
-            this.selection = selection
-            updateAnnotatedString(selection)
+            this.selection = resultSelection
+            updateAnnotatedString(resultSelection)
             // Refresh the caret context so formatting-bar toggles reflect the change just applied.
             readSelectionContext()
         }
-        return updated
+        updated
     }
 
     /**
@@ -451,7 +536,12 @@ class TextKitState(
      */
     fun updateLinkText(newText: String, url: String, range: TextRange): Boolean {
         if (newText.isEmpty()) return false
+        // Text swap + link apply is one logical action; wrap so it is a single undo step (the nested
+        // updateLink reuses this restore point).
+        return recordBefore { updateLinkTextInternal(newText, url, range) }
+    }
 
+    private fun updateLinkTextInternal(newText: String, url: String, range: TextRange): Boolean {
         val min = range.min.coerceIn(0, textFieldValue.text.length)
         val max = range.max.coerceIn(min, textFieldValue.text.length)
         val currentText = textFieldValue.text.substring(min, max)
@@ -677,28 +767,43 @@ class TextKitState(
 
     private fun handleAddingText(marks: Set<Mark> = lastMarks) {
         val action = createAddAction(marks)
-        val (result, range) = TextTransaction.onTextUpdated(action, manager)
-        if (result) {
-            selection = range
-            updateAnnotatedString(selection)
-            tokenState.refreshQuery(textFieldValue.text, selection)
-            // Editing shifts offsets, so a remembered selection is no longer valid.
-            lastRangeSelection = TextRange.Zero
+        val added = (action as? TextEditorAction.TextAdded)?.text.orEmpty()
+        // A single typed character coalesces into the current word; a word boundary (space/newline)
+        // still joins the run but ends it so the next word is a separate undo step. Anything else
+        // (a paste-like multi-char insert) is its own discrete step.
+        val singleChar = added.length == 1
+        val boundary = added.any { it == ' ' || it == '\n' }
+        recordBefore(
+            coalesceKey = if (singleChar) EditKind.Typing else null,
+            breakAfter = !singleChar || boundary
+        ) {
+            val (result, range) = TextTransaction.onTextUpdated(action, manager)
+            if (result) {
+                selection = range
+                updateAnnotatedString(selection)
+                tokenState.refreshQuery(textFieldValue.text, selection)
+                // Editing shifts offsets, so a remembered selection is no longer valid.
+                lastRangeSelection = TextRange.Zero
+            }
+            result
         }
     }
 
     private fun handleRemovingText() {
-        // A partial deletion of an atomic token (e.g. Backspace at its trailing edge) must remove the
-        // whole token instead of clipping a character off its label.
-        if (handleAtomicTokenDeletion()) return
-        val action = createRemoveAction()
-        val (result, range) = TextTransaction.onTextUpdated(action, manager)
-        if (result) {
-            selection = range
-            updateAnnotatedString(selection)
-            tokenState.refreshQuery(textFieldValue.text, selection)
-            // Editing shifts offsets, so a remembered selection is no longer valid.
-            lastRangeSelection = TextRange.Zero
+        recordBefore(coalesceKey = EditKind.Deleting, breakAfter = false) {
+            // A partial deletion of an atomic token (e.g. Backspace at its trailing edge) must remove
+            // the whole token instead of clipping a character off its label.
+            if (handleAtomicTokenDeletion()) return@recordBefore true
+            val action = createRemoveAction()
+            val (result, range) = TextTransaction.onTextUpdated(action, manager)
+            if (result) {
+                selection = range
+                updateAnnotatedString(selection)
+                tokenState.refreshQuery(textFieldValue.text, selection)
+                // Editing shifts offsets, so a remembered selection is no longer valid.
+                lastRangeSelection = TextRange.Zero
+            }
+            result
         }
     }
 
@@ -714,9 +819,13 @@ class TextKitState(
      * an ephemeral trigger (`/`) it inserts the label as plain text.
      */
     fun selectToken(id: String, label: String) {
-        val caret = tokenState.commitSelection(id, label, selection, lastMarks) ?: return
-        selection = caret
-        updateAnnotatedString(caret)
+        recordBefore {
+            val caret = tokenState.commitSelection(id, label, selection, lastMarks)
+                ?: return@recordBefore false
+            selection = caret
+            updateAnnotatedString(caret)
+            true
+        }
     }
 
     /**
@@ -740,10 +849,15 @@ class TextKitState(
      * command trigger is active. Use this from a slash-command popup (see `TextKitSlashCommandPopup`).
      */
     fun runCommand(command: TextKitCommand) {
-        val caret = tokenState.commitCommand(selection) ?: return
-        selection = caret
-        updateAnnotatedString(caret)
-        command.onSelect(this)
+        recordBefore {
+            val caret = tokenState.commitCommand(selection) ?: return@recordBefore false
+            selection = caret
+            updateAnnotatedString(caret)
+            // The command may mutate further (e.g. insertText / applyHeading); those calls nest under
+            // this restore point, so the whole command is a single undo step.
+            command.onSelect(this)
+            true
+        }
     }
 
     /**
@@ -753,15 +867,18 @@ class TextKitState(
      */
     fun insertText(text: String) {
         if (text.isEmpty()) return
-        val caret = manager.insertToken(
-            nodeType = null,
-            id = "",
-            label = text,
-            replaceRange = TextRange(selection.min, selection.max),
-            marks = lastMarks
-        )
-        selection = caret
-        updateAnnotatedString(caret)
+        recordBefore {
+            val caret = manager.insertToken(
+                nodeType = null,
+                id = "",
+                label = text,
+                replaceRange = TextRange(selection.min, selection.max),
+                marks = lastMarks
+            )
+            selection = caret
+            updateAnnotatedString(caret)
+            true
+        }
     }
 
     /**

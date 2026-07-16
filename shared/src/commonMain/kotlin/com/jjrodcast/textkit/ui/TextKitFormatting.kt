@@ -15,6 +15,8 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
+import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.rounded.FormatBold
 import androidx.compose.material.icons.rounded.FormatColorFill
@@ -56,9 +58,11 @@ import textkit.shared.generated.resources.highlight_text
 import textkit.shared.generated.resources.italic_text
 import textkit.shared.generated.resources.link_text
 import textkit.shared.generated.resources.ordered_list_text
+import textkit.shared.generated.resources.redo_text
 import textkit.shared.generated.resources.strikethrough_text
 import textkit.shared.generated.resources.text_color_text
 import textkit.shared.generated.resources.underline_text
+import textkit.shared.generated.resources.undo_text
 
 @Composable
 fun TextKitScreen(
@@ -88,9 +92,32 @@ fun TextKitFormattingBar(
     onLinkClick: (Boolean) -> Unit = {},
     onOrderedListClick: (Boolean) -> Unit = {},
     onBulletedListClick: (Boolean) -> Unit = {},
+    onUndoClick: () -> Unit = {},
+    onRedoClick: () -> Unit = {},
+    canUndo: Boolean = false,
+    canRedo: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier.height(IntrinsicSize.Min)) {
+        TextKitTooltipFormattingItem(
+            tooltipText = stringResource(Res.string.undo_text),
+            rememberVectorPainter(Icons.AutoMirrored.Rounded.Undo),
+            onClick = { onUndoClick() },
+            value = false,
+            backgroundColor = selectedColor,
+            enabled = canUndo
+        )
+        TextKitFormattingSeparator()
+        TextKitTooltipFormattingItem(
+            tooltipText = stringResource(Res.string.redo_text),
+            rememberVectorPainter(Icons.AutoMirrored.Rounded.Redo),
+            onClick = { onRedoClick() },
+            value = false,
+            backgroundColor = selectedColor,
+            enabled = canRedo
+        )
+        TextKitFormattingDivider()
+        TextKitFormattingSeparator()
         TextKitTooltipFormattingItem(
             tooltipText = stringResource(Res.string.bold_text),
             rememberVectorPainter(Icons.Rounded.FormatBold),
@@ -175,6 +202,7 @@ fun TextKitTooltipFormattingItem(
     onClick: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     backgroundColor: Color = Color.Unspecified,
+    enabled: Boolean = true,
 ) {
     TooltipBox(
         modifier = modifier,
@@ -192,7 +220,8 @@ fun TextKitTooltipFormattingItem(
             painter = painter,
             value = value,
             onValueChange = onClick,
-            backgroundColor = backgroundColor
+            backgroundColor = backgroundColor,
+            enabled = enabled
         )
     }
 
@@ -229,7 +258,7 @@ fun TextKitFormattingItem(
         Icon(
             painter = painter,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.secondary
+            tint = MaterialTheme.colorScheme.secondary.copy(alpha = if (enabled) 1f else 0.38f)
         )
     }
 }

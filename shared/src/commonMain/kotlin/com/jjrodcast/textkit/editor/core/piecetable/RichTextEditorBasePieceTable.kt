@@ -92,6 +92,23 @@ internal abstract class RichTextEditorBasePieceTable :
         invalidateCache()
     }
 
+    /**
+     * Captures the current document state as a [PieceTableSnapshot] restore point. **O(1)** — copies
+     * two immutable references (the rope root and the text cache). See [PieceTableSnapshot] for why
+     * the character buffers do not need to be captured.
+     */
+    internal fun snapshot(): PieceTableSnapshot = PieceTableSnapshot(rope.snapshot(), _cachedText)
+
+    /**
+     * Restores a document state previously captured with [snapshot]. **O(1)** — swaps the rope root
+     * and its matching text cache back in. The two are always restored together so the cache never
+     * belongs to a different version than the tree.
+     */
+    internal fun restore(snapshot: PieceTableSnapshot) {
+        rope.restore(snapshot.root)
+        _cachedText = snapshot.cachedText
+    }
+
     override fun getTextAt(offset: Int): TextEditorModel {
         val (index, _) = getPieceIndexAndOffset(offset)
         val piece = rope.get(index)

@@ -18,6 +18,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -51,6 +60,7 @@ fun TextKitEditor(
             .verticalScroll(rememberScrollState())
             .fillMaxWidth()
             .focusRequester(focusRequester)
+            .onPreviewKeyEvent { handleUndoRedoShortcut(it, state) }
             .pointerInput(state) {
                 awaitPointerEventScope {
                     while (true) {
@@ -85,6 +95,23 @@ fun TextKitEditor(
     )
 }
 
+/**
+ * Handles the undo/redo keyboard shortcuts on a key-down event, consuming the event when it triggers
+ * one. Accepts Ctrl (desktop/web) or Cmd (macOS/iOS): Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z and Ctrl+Y
+ * redo. Returns false for anything else so normal typing is unaffected.
+ */
+private fun handleUndoRedoShortcut(event: KeyEvent, state: TextKitState): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    val modifier = event.isCtrlPressed || event.isMetaPressed
+    if (!modifier) return false
+    return when {
+        event.key == Key.Z && !event.isShiftPressed -> state.undo()
+        event.key == Key.Z && event.isShiftPressed -> state.redo()
+        event.key == Key.Y -> state.redo()
+        else -> false
+    }
+}
+
 @Composable
 fun TextKitEditorOutlined(
     modifier: Modifier = Modifier,
@@ -108,6 +135,7 @@ fun TextKitEditorOutlined(
         modifier = modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
+            .onPreviewKeyEvent { handleUndoRedoShortcut(it, state) }
             .pointerInput(state) {
                 awaitPointerEventScope {
                     while (true) {
