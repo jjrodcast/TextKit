@@ -13,6 +13,7 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 
 ## Table of contents
 
+- [Installation](#installation)
 - [Quick start](#quick-start)
 - [Editor state](#editor-state)
 - [Reading the content](#reading-the-content)
@@ -25,6 +26,16 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 - [Configuration](#configuration)
 - [Read-only / viewer mode](#read-only--viewer-mode)
 - [Document format](#document-format)
+
+## Installation
+
+Text Kit will be available on `mavenCentral()`.
+
+Currently the snapshot version is available.
+
+```kotlin
+implementation("io.github.jjrodcast:textkit:1.0.0-alpha01-SNAPSHOT")
+```
 
 ## Quick start
 
