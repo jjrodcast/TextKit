@@ -13,9 +13,6 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 (`type: "doc"` → block nodes → inline runs with marks), so styling, lists, links and inline tokens
 (mentions, hashtags) survive an exact load → edit → export cycle.
 
-[![Publish to Maven Central](https://github.com/jjrodcast/TextKit/actions/workflows/publish.yml/badge.svg)](https://github.com/jjrodcast/TextKit/actions/workflows/publish.yml)
-![GitHub Release](https://img.shields.io/github/v/release/jjrodcast/textkit)
-
 
 ## Table of contents
 
@@ -36,13 +33,15 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 - [Document format](#document-format)
 
 ## Installation
+[![Publish to Maven Central](https://github.com/jjrodcast/TextKit/actions/workflows/publish.yml/badge.svg)](https://github.com/jjrodcast/TextKit/actions/workflows/publish.yml)
+![GitHub Release](https://img.shields.io/github/v/release/jjrodcast/textkit)
 
-Text Kit will be available on `mavenCentral()`.
+Text Kit is available on `mavenCentral()`.
 
-Currently the snapshot version is available.
+Check the latest version
 
 ```kotlin
-implementation("io.github.jjrodcast:textkit:1.0.0-SNAPSHOT")
+implementation("io.github.jjrodcast:textkit:$version_code")
 ```
 
 ## Quick start
