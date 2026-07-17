@@ -9,7 +9,13 @@ data class TextKitConfiguration(
     val linkColor: Color = Color(0xFF1B75D0),
     val textColor: Color = Color(0xFF000000),
     val fontSize: Int = 14,
-    val triggers: Set<TextKitTrigger> = emptySet()
+    val triggers: Set<TextKitTrigger> = emptySet(),
+    /**
+     * Whether embedded blocks (tables, images, …) are interactive. When false, [TextKitState.insertEmbed]
+     * and [TextKitState.openEmbedAt] are no-ops, so no new embeds can be inserted and tapping an existing
+     * placeholder won't open its popup. Existing embeds still render as placeholders and round-trip in JSON.
+     */
+    val embedsEnabled: Boolean = true
 ) {
     /** The trigger registered for [char] (e.g. `@`), or null when that character has no trigger. */
     fun triggerFor(char: Char): TextKitTrigger? = triggers.firstOrNull { it.triggerKey == char }
