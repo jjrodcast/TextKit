@@ -97,7 +97,6 @@ fun TextKitSample() {
             addTrigger { TextKitTrigger.TextKitMentionTrigger() }
             addTrigger { TextKitTrigger.TextKitHashtagTrigger() }
             addTrigger { TextKitTrigger.TextKitSlashTrigger() }
-            embedsEnabled { false }
         }
     }
     val state =
