@@ -720,6 +720,7 @@ class TextKitState(
      * Returns true when it opened one, so the caller can consume the click.
      */
     fun openEmbedAt(position: Offset): Boolean {
+        if (!configuration.embedsEnabled) return false
         val layout = textLayoutResult ?: return false
         val offset = layout.getOffsetForPosition(position).coerceIn(0, textFieldValue.text.length)
         val info = manager.embedAt(offset) ?: return false
@@ -739,11 +740,14 @@ class TextKitState(
      * Inserts an embedded block ([rawJson], e.g. a table) at the caret as its own paragraph, shown as
      * the placeholder [label]. One undo step. Returns whether it was inserted.
      */
-    fun insertEmbed(embedType: String, rawJson: String, label: String): Boolean = recordBefore {
-        val range = manager.insertEmbed(embedType, rawJson, label, TextRange(selection.min, selection.max))
-        selection = TextRange(range.max)
-        updateAnnotatedString(selection)
-        true
+    fun insertEmbed(embedType: String, rawJson: String, label: String): Boolean {
+        if (!configuration.embedsEnabled) return false
+        return recordBefore {
+            val range = manager.insertEmbed(embedType, rawJson, label, TextRange(selection.min, selection.max))
+            selection = TextRange(range.max)
+            updateAnnotatedString(selection)
+            true
+        }
     }
 
     /** Replaces the JSON of the currently open embed (one undo step). */

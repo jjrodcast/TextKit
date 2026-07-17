@@ -339,6 +339,13 @@ To let users insert embeds from the `/` menu, wrap `insertEmbed` in a custom sla
 TextKitCommand.custom(id = "table", label = "Insert table") { it.insertEmbed(EmbedTypes.Table, tableJson, "📊 Table") }
 ```
 
+**Enabling / disabling embeds.** Set `embedsEnabled { false }` in the configuration (see
+[Configuration](#configuration)) to turn the feature off: `insertEmbed` and `openEmbedAt` become
+no-ops, so no new embeds can be inserted and tapping an existing placeholder won't open its popup.
+Existing embeds still render as placeholders and round-trip losslessly in JSON. To drive it from a UI
+button, build two states and swap the one you hand to `rememberTextKitState`, or gate your own insert
+button on the same flag.
+
 ## Undo / redo
 
 TextKit keeps a bounded edit history (default 100 steps) that restores both the document and the
@@ -421,6 +428,7 @@ val configuration = createTextKitConfiguration {
     linkColor { Color(0xFF1B75D0) }
     textColor { Color(0xFF000000) }
     fontSize { 14 }                                          // default font size
+    embedsEnabled { true }                                   // false = disable inserting/opening embeds
     addTrigger { TextKitTrigger.TextKitMentionTrigger() }    // '@' mentions
     addTrigger { TextKitTrigger.TextKitHashtagTrigger() }    // '#' hashtags
     addTrigger { TextKitTrigger.TextKitSlashTrigger() }      // '/' slash commands
