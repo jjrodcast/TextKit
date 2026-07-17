@@ -1,10 +1,13 @@
 package com.jjrodcast.textkit.ui.state
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -73,17 +76,15 @@ import com.jjrodcast.textkit.ui.utils.save
  * A state object that can be used to remember the state of a RichText component across recomposition.
  *
  * @param json The JSON string representing the initial state of the RichText component.
- * @param isViewer Whether the component is in read-only viewer mode.
  * @param configuration Configuration object that holds the colors and sizes for UI components.
  */
 @Composable
 fun rememberTextKitState(
     json: String = "{}",
-    isViewer: Boolean = false,
     configuration: TextKitConfiguration = remember { createTextKitConfiguration() }
 ): TextKitState {
     val state = rememberSaveable(saver = TextKitState.saver(configuration)) {
-        TextKitState(json, isViewer, configuration)
+        TextKitState(json, configuration)
             .apply { setup() }
     }
     return state
@@ -100,7 +101,6 @@ fun rememberTextKitState(
 @Stable
 class TextKitState(
     private val json: String,
-    private val isViewer: Boolean,
     private val configuration: TextKitConfiguration
 ) {
 
@@ -125,7 +125,7 @@ class TextKitState(
         private set
 
     /**
-     * Re-entrancy guard for [recordBefore]. A compound action (e.g. a link text+URL edit that swaps
+     * Re-entrance guard for [recordBefore]. A compound action (e.g. a link text+URL edit that swaps
      * text and then applies a link) calls other recording methods internally; only the outermost call
      * should capture a restore point, so the whole action is a single undo step.
      */
@@ -204,7 +204,7 @@ class TextKitState(
         createViewerAnnotatedString()
     }
 
-    val annotatedStringForViewer get() = viewerAnnotatedStringState.value
+    val viewerTextValue get() = viewerAnnotatedStringState.value
 
     private val isTyping get() = prevTextFieldValue.selection.collapsed && textFieldValue.selection.collapsed
 
@@ -233,7 +233,7 @@ class TextKitState(
     }
 
     internal fun setup() {
-        manager.load(json, isViewer)
+        manager.load(json, configuration.viewerMode)
         val text = manager.text
         textFieldValue = textFieldValue.copy(text = text, selection = TextRange.Zero)
         updateAnnotatedString(textFieldValue.selection)
@@ -743,7 +743,12 @@ class TextKitState(
     fun insertEmbed(embedType: String, rawJson: String, label: String): Boolean {
         if (!configuration.embedsEnabled) return false
         return recordBefore {
-            val range = manager.insertEmbed(embedType, rawJson, label, TextRange(selection.min, selection.max))
+            val range = manager.insertEmbed(
+                embedType,
+                rawJson,
+                label,
+                TextRange(selection.min, selection.max)
+            )
             selection = TextRange(range.max)
             updateAnnotatedString(selection)
             true
@@ -1029,8 +1034,8 @@ class TextKitState(
     private fun createViewerAnnotatedString(): Pair<AnnotatedString, Map<String, InlineTextContent>> {
         val inlineContent = mutableMapOf<String, InlineTextContent>()
         val annotatedString = buildAnnotatedString {
-            paragraphs.forEach { paragraph ->
-                withStyle(DefaultParagraphStyle) {
+            withStyle(DefaultParagraphStyle) {
+                paragraphs.forEach { paragraph ->
                     paragraph.children.forEach { child ->
                         val id = "${child.start}-${child.end}"
                         val text = if (child.text.endsWith(lineBreak)) {
@@ -1046,11 +1051,13 @@ class TextKitState(
                                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                                 )
                             ) {
-                                Checkbox(
-                                    checked = taskDecorator.checked,
-                                    onCheckedChange = {},
-                                    modifier = Modifier.padding(start = 8.dp, end = 16.dp)
-                                )
+                                CompositionLocalProvider(LocalRippleConfiguration provides null) {
+                                    Checkbox(
+                                        checked = taskDecorator.checked,
+                                        onCheckedChange = {},
+                                        modifier = Modifier.padding(start = 8.dp, end = 16.dp)
+                                    )
+                                }
                             }
                         } else {
                             pushStringAnnotation(id, text)
@@ -1175,7 +1182,6 @@ class TextKitState(
                     save(it.textFieldValue.text),
                     save(it.selection, TextRangeSaver, this),
                     save(it.toJson()),
-                    save(it.isViewer),
                 )
             },
             restore = {
@@ -1186,9 +1192,8 @@ class TextKitState(
                     selection = restore(list[1], TextRangeSaver)!!
                 )
                 val json: String = restore(list[2])!!
-                val isViewer: Boolean = restore(list[3])!!
 
-                val state = TextKitState(json, isViewer, configuration)
+                val state = TextKitState(json, configuration)
                     .also { state ->
                         state.textFieldValue = textFieldValue
                         state.updateAnnotatedString(state.textFieldValue.selection)

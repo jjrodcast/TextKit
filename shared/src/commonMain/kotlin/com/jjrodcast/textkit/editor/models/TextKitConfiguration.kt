@@ -15,7 +15,8 @@ data class TextKitConfiguration(
      * and [TextKitState.openEmbedAt] are no-ops, so no new embeds can be inserted and tapping an existing
      * placeholder won't open its popup. Existing embeds still render as placeholders and round-trip in JSON.
      */
-    val embedsEnabled: Boolean = true
+    val embedsEnabled: Boolean = true,
+    val viewerMode: Boolean = false
 ) {
     /** The trigger registered for [char] (e.g. `@`), or null when that character has no trigger. */
     fun triggerFor(char: Char): TextKitTrigger? = triggers.firstOrNull { it.triggerKey == char }
