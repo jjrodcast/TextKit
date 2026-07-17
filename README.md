@@ -5,7 +5,9 @@
 TextKit is a rope-backed, piece-table rich-text editor engine for **Compose Multiplatform**
 (Android, iOS, Desktop/JVM and Web — Wasm & JS). It ships a `TextKitState` holder, ready-made
 editor composables, a formatting bar, link popups, a generalized **trigger** system (mentions,
-hashtags, slash commands), and lossless (de)serialization to a **ProseMirror-style JSON document**.
+hashtags, slash commands), **embedded blocks** (tables, images and other non-renderable content
+as clickable placeholders), full **undo/redo** with coalescing, and lossless (de)serialization
+to a **ProseMirror-style JSON document**.
 
 Unlike editors that round-trip through HTML or Markdown, TextKit persists a structured JSON document
 (`type: "doc"` → block nodes → inline runs with marks), so styling, lists, links and inline tokens
@@ -22,6 +24,8 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 - [Lists](#lists)
 - [Links](#links)
 - [Triggers: mentions, hashtags & slash commands](#triggers-mentions-hashtags--slash-commands)
+- [Embedded blocks](#embedded-blocks)
+- [Undo / redo](#undo--redo)
 - [Formatting bar](#formatting-bar)
 - [Configuration](#configuration)
 - [Read-only / viewer mode](#read-only--viewer-mode)
@@ -34,7 +38,7 @@ Text Kit will be available on `mavenCentral()`.
 Currently the snapshot version is available.
 
 ```kotlin
-implementation("io.github.jjrodcast:textkit:1.0.0-alpha01-SNAPSHOT")
+implementation("io.github.jjrodcast:textkit:1.0.0-SNAPSHOT")
 ```
 
 ## Quick start
@@ -81,7 +85,8 @@ Observable properties you can read in composition:
 | `activeLink` | `TextKitLinkInfo?` | Link under the caret, or `null`. Observe it to show a link popup. |
 | `activeTrigger` | `TextKitTrigger?` | The trigger currently being composed (`@`/`#`/`/`…), or `null`. Drives which candidate set the popup shows. |
 | `tokenQuery` | `String?` | Text typed after the active trigger char, or `null` when no trigger is being composed. |
-| `mentionQuery` | `String?` | Backward-compatible alias of `tokenQuery`. |
+| `activeEmbed` | `EmbedInfo?` | The embedded block under the caret/tap, or `null`. Observe it to show an embed popup. |
+| `canUndo` / `canRedo` | `Boolean` | Whether an undo / redo step is available (drives toolbar button enablement). |
 | `annotatedStringForViewer` | `Pair<AnnotatedString, Map<String, InlineTextContent>>` | Rendered content for read-only display. |
 
 ## Reading the content
@@ -248,7 +253,7 @@ Box {
 
 > **Backward compatibility:** the mention-only helpers still work as thin aliases —
 > `TextKitMentionPopup(state, candidates)`, `TextKitMentionSuggestion`, `state.selectMention(...)`,
-> `state.dismissMention()`, `state.mentionQuery`.
+> and `state.dismissMention()`.
 
 ### 3. Slash commands (ephemeral)
 
@@ -285,6 +290,74 @@ the editor exposes.
 `state.insertText(text)` (insert plain text at the caret), `state.applyHeading(level)` (apply an H1–H6
 font size).
 
+## Embedded blocks
+
+An **embedded block** is a non-renderable node (a table, an image, a linked document, …) that lives
+inline in the text as a single **clickable placeholder**. The editor stores the block's full JSON
+verbatim and shows only a one-line label where it sits; tapping the placeholder opens a popup so you
+can view, edit or remove it. The block behaves as one atomic unit and its JSON round-trips losslessly.
+
+Insert, update and remove embeds through `TextKitState`:
+
+```kotlin
+import androidx.compose.ui.geometry.Offset
+import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
+
+// Insert at the caret as a single undo step. `rawJson` is the whole block object as a String.
+state.insertEmbed(
+    embedType = EmbedTypes.Table,   // "table", "image", "document", or any custom type string
+    rawJson = tableJson,
+    label = "📊 Table",             // one-line placeholder shown in the editor
+)
+
+state.updateActiveEmbed(rawJson = newTableJson) // replace the JSON of the open embed
+state.removeActiveEmbed()                        // remove the open embed and close the popup
+state.dismissEmbedPopup()                        // just close the popup
+
+state.openEmbedAt(position = Offset(x, y))       // open the popup if a tap hit a placeholder
+```
+
+Built-in embed types live in `EmbedTypes`: `Table` (`"table"`), `Image` (`"image"`) and
+`Document` (`"document"`). Any other type string works too — TextKit stores and returns it unchanged.
+
+`TextKitEditor` already detects taps on placeholders (it calls `openEmbedAt`), so you only need to
+render `TextKitEmbedPopup` in the same `Box` as the editor. It observes `state.activeEmbed` (an
+`EmbedInfo` with `range`, `embedType` and `rawJson`) and anchors itself over the placeholder:
+
+```kotlin
+import com.jjrodcast.textkit.ui.TextKitEmbedPopup
+
+Box {
+    TextKitEditor(state = state)
+    TextKitEmbedPopup(state = state) // defaults onClose → dismissEmbedPopup(), onRemove → removeActiveEmbed()
+}
+```
+
+To let users insert embeds from the `/` menu, wrap `insertEmbed` in a custom slash command:
+
+```kotlin
+TextKitCommand.custom(id = "table", label = "Insert table") { it.insertEmbed(EmbedTypes.Table, tableJson, "📊 Table") }
+```
+
+## Undo / redo
+
+TextKit keeps a bounded edit history (default 100 steps) that restores both the document and the
+caret. Consecutive same-kind edits (typing, deleting) **coalesce** into one step and break on word
+boundaries; discrete actions (formatting, list toggles, token inserts, embed and link operations)
+are each their own step. History is always on — no configuration required — and is cleared on `load`.
+
+```kotlin
+state.undo()   // returns false if there is nothing to undo
+state.redo()   // returns false if there is nothing to redo
+
+state.canUndo  // observable; use it to enable/disable a toolbar button
+state.canRedo
+```
+
+`TextKitEditor` and `TextKitEditorOutlined` already handle the keyboard shortcuts: **Ctrl/Cmd+Z**
+(undo), **Ctrl/Cmd+Shift+Z** and **Ctrl+Y** (redo). See the formatting bar below for wiring the
+toolbar buttons.
+
 ## Formatting bar
 
 TextKit ships a ready-made toolbar. Keep a `TextKitFormattingBarState` and sync it from the editor so
@@ -316,6 +389,10 @@ TextKitScreen { // MaterialTheme + Scaffold wrapper (optional)
         onLinkClick = { state.applyLink() },
         onOrderedListClick = state::toggleOrderedList,
         onBulletedListClick = state::toggleUnorderedList,
+        onUndoClick = { state.undo() },
+        onRedoClick = { state.redo() },
+        canUndo = state.canUndo,
+        canRedo = state.canRedo,
     )
     Box {
         TextKitEditor(state = state)
@@ -403,6 +480,14 @@ list of block nodes; each block holds inline runs, and inline runs carry `marks`
 **Inline nodes:** `text`, `hardBreak`, and atomic trigger tokens `mention` and `hashtag` (both with
 `attrs.id`, `attrs.label`). Slash (`/`) commands are ephemeral actions and are **not** persisted as
 nodes.
+
+**Embedded blocks:** rendered inline as clickable placeholders but persisted as their own block node,
+keyed on `type` — built-in kinds are `table`, `image` and `document` (any custom type is preserved).
+The block's original JSON is stored verbatim, so it round-trips unchanged:
+
+```json
+{ "type": "image", "attrs": { "src": "text_kit_banner" } }
+```
 
 **Marks** (on inline runs): `bold`, `italic`, `underline`, `strike`, `highlight`, `link`
 (`attrs.href`, `attrs.target`), and `textStyle` (`attrs.color`, `attrs.fontSize`).
