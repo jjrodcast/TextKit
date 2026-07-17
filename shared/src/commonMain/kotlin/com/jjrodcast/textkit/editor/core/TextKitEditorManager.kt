@@ -1,6 +1,8 @@
 package com.jjrodcast.textkit.editor.core
 
 import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.core.history.EditorHistoryManager
+import com.jjrodcast.textkit.editor.core.history.HistorySnapshot
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.MentionType
@@ -20,9 +22,65 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
 
     internal val transaction by lazy { TextEditorTransaction(configuration) }
 
+    private val history = EditorHistoryManager()
+
     fun load(json: String, isViewer: Boolean) {
         transaction.loadWith(json, isViewer)
+        // The document was replaced; snapshots taken against the previous one are meaningless.
+        history.clear()
     }
+
+    /** Whether there is at least one edit that [undo] can revert. */
+    val canUndo: Boolean get() = history.canUndo
+
+    /** Whether there is at least one reverted edit that [redo] can reapply. */
+    val canRedo: Boolean get() = history.canRedo
+
+    /**
+     * Captures the current document state paired with [selection] as a restore point, **before** a
+     * mutation. Pair with [pushHistory] once the mutation is known to have changed the document, so
+     * no-op edits do not create empty undo steps. O(1).
+     */
+    internal fun captureHistoryPoint(selection: TextRange): HistorySnapshot =
+        HistorySnapshot(transaction.snapshot(), selection)
+
+    /**
+     * Commits a restore point captured with [captureHistoryPoint]. [coalesceKey] merges a run of
+     * same-kind edits into one undo step (see [EditorHistoryManager.record]); pass `null` for a
+     * discrete step.
+     */
+    internal fun pushHistory(point: HistorySnapshot, coalesceKey: Any? = null) =
+        history.record(point, coalesceKey)
+
+    /** Ends the current coalescing run so the next [pushHistory] starts a fresh undo step. */
+    internal fun breakHistoryCoalescing() = history.breakCoalescing()
+
+    /**
+     * Reverts the last recorded edit. [currentSelection] is the live caret/selection, stored so
+     * [redo] can restore it. Returns the selection to place the caret at, or `null` when there is
+     * nothing to undo.
+     */
+    fun undo(currentSelection: TextRange): TextRange? {
+        val restored = history.undo(HistorySnapshot(transaction.snapshot(), currentSelection))
+            ?: return null
+        transaction.restore(restored.document)
+        return restored.selection
+    }
+
+    /**
+     * Reapplies the last undone edit. [currentSelection] is the live caret/selection, stored so a
+     * following [undo] can restore it. Returns the selection to place the caret at, or `null` when
+     * there is nothing to redo.
+     */
+    fun redo(currentSelection: TextRange): TextRange? {
+        val restored = history.redo(HistorySnapshot(transaction.snapshot(), currentSelection))
+            ?: return null
+        transaction.restore(restored.document)
+        return restored.selection
+    }
+
+    /** Drops all undo/redo history. */
+    fun clearHistory() = history.clear()
 
     val text get() = transaction.text
 

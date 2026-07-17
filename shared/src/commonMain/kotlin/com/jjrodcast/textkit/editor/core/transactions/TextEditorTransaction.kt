@@ -12,6 +12,7 @@ import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
+import com.jjrodcast.textkit.editor.core.piecetable.PieceTableSnapshot
 import com.jjrodcast.textkit.editor.core.piecetable.RichTextEditorBasePieceTable
 import com.jjrodcast.textkit.editor.core.piecetable.RichTextEditorPieceTable
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPieceTransaction
@@ -222,4 +223,10 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
     }
 
     internal fun getLastOffset(): Int = pieceTable.getLastOffset()
+
+    /** Captures the document state for undo/redo. O(1). See [RichTextEditorBasePieceTable.snapshot]. */
+    internal fun snapshot() = pieceTable.snapshot()
+
+    /** Restores a document state captured with [snapshot]. O(1). */
+    internal fun restore(snapshot: PieceTableSnapshot) = pieceTable.restore(snapshot)
 }

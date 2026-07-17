@@ -53,6 +53,20 @@ internal class PieceRope {
         root = merge(root, RopeNode.Leaf(piece))
     }
 
+    // ── Versioning (snapshot / restore) ──────────────────────────────────────
+
+    /**
+     * Captures the current tree as an opaque version token. **O(1)** — returns the [root]
+     * reference. Safe because [RopeNode] is immutable (path-copying): the captured tree shares
+     * structure with future versions and is never mutated, so it stays a valid restore point.
+     */
+    fun snapshot(): RopeNode? = root
+
+    /** Restores a tree previously captured with [snapshot]. **O(1)**. */
+    fun restore(snapshot: RopeNode?) {
+        root = snapshot
+    }
+
     // ── Point access ───────────────────────────────────────────────────────
 
     /** Returns the piece at 0-indexed [index]. O(log P). */
