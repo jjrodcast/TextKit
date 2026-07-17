@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.maven.publish)
 }
 
 kotlin {
@@ -78,6 +79,53 @@ kotlin {
         }
         jsMain.dependencies {
             implementation(libs.wrappers.browser)
+        }
+    }
+}
+
+mavenPublishing {
+    publishToMavenCentral()
+
+    // Only sign when a signing key is available (i.e. in CI, where it is
+    // injected via ORG_GRADLE_PROJECT_signingInMemoryKey). This lets local
+    // `publishToMavenLocal` runs work without GPG keys configured.
+    if (project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
+    }
+
+    coordinates(
+        groupId = "io.github.jjrodcast",
+        artifactId = "textkit",
+        // Version comes from the pushed git tag (e.g. tag `v1.0.0-alpha01` -> `1.0.0-alpha01`).
+        // Falls back to a SNAPSHOT for local builds when no -PlibVersion is provided.
+        version = (findProperty("libVersion") as String?) ?: "1.0.0-SNAPSHOT"
+    )
+
+    pom {
+
+        name = "Text Kit"
+        description = "Rich Text Editor engine for Compose Multiplatform"
+        inceptionYear = "2026"
+        url = "https://github.com/jjrodcast/TextKit"
+
+        licenses {
+            license {
+                name = "MIT License"
+                url = "https://opensource.org/licenses/MIT"
+                distribution = "repo"
+            }
+        }
+
+        developers {
+            developer {
+                id = "jjrodcast"
+                name = "Jorge Rodriguez"
+                url = "https://github.com/jjrodcast/jjrodcast"
+            }
+        }
+
+        scm {
+            url = "https://github.com/jjrodcast/TextKit"
         }
     }
 }
