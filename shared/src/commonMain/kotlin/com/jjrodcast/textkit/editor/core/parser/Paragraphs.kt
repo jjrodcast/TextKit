@@ -83,13 +83,17 @@ internal const val ParagraphDiscriminator = "type"
 internal object ParagraphSerializer :
     JsonContentPolymorphicSerializer<BaseParagraph>(BaseParagraph::class) {
     override fun selectDeserializer(element: JsonElement): DeserializationStrategy<BaseParagraph> {
-        return when (element.jsonObject[ParagraphDiscriminator]?.jsonPrimitive?.contentOrNull) {
-            ParagraphTypes.Paragraph -> Paragraph.serializer()
-            ParagraphTypes.Heading -> Heading.serializer()
-            ListTypes.BulletList -> BulletedList.serializer()
-            ListTypes.OrderedList -> OrderedList.serializer()
-            ListTypes.TaskList -> TaskList.serializer()
-            BlockquoteType.Blockquote -> Blockquote.serializer()
+        val type = element.jsonObject[ParagraphDiscriminator]?.jsonPrimitive?.contentOrNull
+        return when {
+            type == ParagraphTypes.Paragraph -> Paragraph.serializer()
+            type == ParagraphTypes.Heading -> Heading.serializer()
+            type == ListTypes.BulletList -> BulletedList.serializer()
+            type == ListTypes.OrderedList -> OrderedList.serializer()
+            type == ListTypes.TaskList -> TaskList.serializer()
+            type == BlockquoteType.Blockquote -> Blockquote.serializer()
+            // Block-level nodes the editor cannot render (table, image, …) are kept verbatim as an
+            // opaque embed so they round-trip and can be shown as a placeholder.
+            EmbedTypes.isEmbed(type) -> EmbedBlockSerializer
             else -> ParagraphNone.serializer()
         }
     }

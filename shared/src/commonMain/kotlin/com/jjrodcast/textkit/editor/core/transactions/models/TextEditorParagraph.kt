@@ -1,6 +1,7 @@
 package com.jjrodcast.textkit.editor.core.transactions.models
 
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
+import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.MentionType
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichToken
@@ -24,6 +25,12 @@ class TextEditorItem internal constructor(
 
     /** True specifically for a mention token. */
     val isMention get() = token?.type == MentionType.Mention
+
+    /** True for an embedded-block placeholder (a table/image/document rendered as a one-line chip). */
+    val isEmbed get() = token?.type == EmbedTokenType
+
+    /** The embedded block's JSON (verbatim), or null when this item is not an embed. */
+    val embedPayload get() = if (isEmbed) token?.payload else null
 
     companion object {
         internal fun from(model: TextEditorModel) = TextEditorItem(

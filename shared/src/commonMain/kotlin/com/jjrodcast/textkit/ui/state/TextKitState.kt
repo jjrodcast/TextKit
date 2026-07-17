@@ -706,6 +706,73 @@ class TextKitState(
         pinnedLinkRange = null
     }
 
+    // region Embedded blocks (tables, images, documents, …)
+
+    /**
+     * The embed placeholder whose popup is currently open, or null. Observe it to show
+     * [com.jjrodcast.textkit.ui.TextKitEmbedPopup]; it carries the block's range and JSON.
+     */
+    var activeEmbed by mutableStateOf<TextKitEditorManager.EmbedInfo?>(null)
+        private set
+
+    /**
+     * Opens the embed popup when [position] (text-field local coordinates) sits on a placeholder.
+     * Returns true when it opened one, so the caller can consume the click.
+     */
+    fun openEmbedAt(position: Offset): Boolean {
+        val layout = textLayoutResult ?: return false
+        val offset = layout.getOffsetForPosition(position).coerceIn(0, textFieldValue.text.length)
+        val info = manager.embedAt(offset) ?: return false
+        activeEmbed = info
+        return true
+    }
+
+    /** Closes the embed popup. */
+    fun dismissEmbedPopup() {
+        activeEmbed = null
+    }
+
+    /** Bounding box of the active embed placeholder (to anchor its popup), or null. */
+    fun activeEmbedBoundingBox(): Rect? = activeEmbed?.let { linkBoundingBox(it.range) }
+
+    /**
+     * Inserts an embedded block ([rawJson], e.g. a table) at the caret as its own paragraph, shown as
+     * the placeholder [label]. One undo step. Returns whether it was inserted.
+     */
+    fun insertEmbed(embedType: String, rawJson: String, label: String): Boolean = recordBefore {
+        val range = manager.insertEmbed(embedType, rawJson, label, TextRange(selection.min, selection.max))
+        selection = TextRange(range.max)
+        updateAnnotatedString(selection)
+        true
+    }
+
+    /** Replaces the JSON of the currently open embed (one undo step). */
+    fun updateActiveEmbed(rawJson: String): Boolean {
+        val info = activeEmbed ?: return false
+        val changed = recordBefore {
+            manager.updateEmbedAt(info.range, rawJson)
+            updateAnnotatedString(selection)
+            true
+        }
+        if (changed) activeEmbed = manager.embedAt(info.range.min)
+        return changed
+    }
+
+    /** Removes the currently open embed and closes its popup (one undo step). */
+    fun removeActiveEmbed(): Boolean {
+        val info = activeEmbed ?: return false
+        val changed = recordBefore {
+            manager.removeEmbedAt(info.range)
+            selection = TextRange(info.range.min)
+            updateAnnotatedString(selection)
+            true
+        }
+        dismissEmbedPopup()
+        return changed
+    }
+
+    // endregion
+
     /**
      * Bounding box of the link at [range] in the text field's local coordinates, or null if the
      * layout is not available yet. Used to anchor the link popup next to the link. For a multi-line

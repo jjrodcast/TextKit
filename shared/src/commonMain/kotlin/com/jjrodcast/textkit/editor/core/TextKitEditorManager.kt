@@ -4,11 +4,15 @@ import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.history.EditorHistoryManager
 import com.jjrodcast.textkit.editor.core.history.HistorySnapshot
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
+import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.MentionType
+import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.TokenAttrs
+import com.jjrodcast.textkit.editor.core.parser.embedType
+import com.jjrodcast.textkit.editor.utils.fastForEach
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichToken
 import com.jjrodcast.textkit.editor.core.transactions.TextEditorTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorSelectedMark
@@ -215,4 +219,89 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
         if (range.length > 0) transaction.delete(range.min, range.length)
         return TextRange(range.min)
     }
+
+    // region Embedded blocks (tables, images, documents, …)
+
+    /** A placeholder currently in the document: its [range], the block [rawJson] and its [embedType]. */
+    data class EmbedInfo(val range: TextRange, val embedType: String, val rawJson: String)
+
+    private var embedSeq = 0
+
+    /**
+     * Inserts an embedded block ([rawJson], e.g. a `table`) at [at] as its **own paragraph**, shown as
+     * the one-line placeholder [label]. If [at] falls mid-paragraph the paragraph is split so the embed
+     * stays isolated (left text · embed · right text). Returns the placeholder's range.
+     */
+    fun insertEmbed(embedType: String, rawJson: String, label: String, at: TextRange): TextRange {
+        val start = at.min
+        if (at.length > 0) transaction.delete(start, at.length)
+        val fullText = text
+        var pos = start
+        // Close the current paragraph on the left when the caret sits mid-line.
+        if (pos > 0 && fullText.getOrNull(pos - 1) != '\n') {
+            transaction.insert(TextEditorModel.create(text = LINE_BREAK), pos)
+            pos += 1
+        }
+        // Terminate the embed's own paragraph with a line break, unless the right side already starts
+        // one (avoids an extra empty line) or we're at the end of the document.
+        val rightChar = fullText.getOrNull(start)
+        val placeholderText = if (rightChar != null && rightChar != '\n') label + LINE_BREAK else label
+        val model = TextEditorModel.create(
+            text = placeholderText,
+            token = RichToken(
+                type = EmbedTokenType,
+                attrs = TokenAttrs(id = "embed-${embedSeq++}", label = label),
+                payload = rawJson
+            )
+        )
+        transaction.insert(model, pos)
+        return TextRange(pos, pos + placeholderText.length)
+    }
+
+    /** Replaces the block JSON of the placeholder at [range] (its visible label is kept). */
+    fun updateEmbedAt(range: TextRange, rawJson: String): Boolean {
+        val safeMin = range.min.coerceIn(0, text.length)
+        val safeMax = range.max.coerceIn(safeMin, text.length)
+        val current = text.substring(safeMin, safeMax)
+        val label = current.removeSuffix(LINE_BREAK)
+        val model = TextEditorModel.create(
+            text = current,
+            token = RichToken(
+                type = EmbedTokenType,
+                attrs = TokenAttrs(id = "embed-${embedSeq++}", label = label),
+                payload = rawJson
+            )
+        )
+        return transaction.update(safeMin, safeMax - safeMin, model)
+    }
+
+    /** Removes the placeholder at [range] (and its line break) → the block disappears from the JSON. */
+    fun removeEmbedAt(range: TextRange): Boolean {
+        if (range.length <= 0) return false
+        return transaction.delete(range.min, range.length)
+    }
+
+    /** The embed placeholder at document [offset], or null when [offset] is not on one. */
+    fun embedAt(offset: Int): EmbedInfo? {
+        getParagraphs().fastForEach { paragraph ->
+            paragraph.children.fastForEach { child ->
+                if (child.isEmbed && offset >= child.start && offset < child.end) {
+                    val payload = child.embedPayload ?: return@fastForEach
+                    return EmbedInfo(
+                        range = TextRange(child.start, child.end),
+                        embedType = embedTypeOf(payload),
+                        rawJson = payload
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    private fun embedTypeOf(payload: String): String =
+        TEXT_EDITOR_JSON.parseToJsonElement(payload).embedType()
+
+    // endregion
 }
+
+private const val LINE_BREAK = "\n"
