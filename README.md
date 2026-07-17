@@ -14,6 +14,7 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 (mentions, hashtags) survive an exact load → edit → export cycle.
 
 [![Publish to Maven Central](https://github.com/jjrodcast/TextKit/actions/workflows/publish.yml/badge.svg)](https://github.com/jjrodcast/TextKit/actions/workflows/publish.yml)
+![GitHub Release](https://img.shields.io/github/v/release/jjrodcast/textkit)
 
 
 ## Table of contents
