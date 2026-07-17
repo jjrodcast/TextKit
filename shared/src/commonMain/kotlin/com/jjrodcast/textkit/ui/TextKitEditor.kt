@@ -44,9 +44,7 @@ import textkit.shared.generated.resources.type_text
 fun TextKitEditor(
     modifier: Modifier = Modifier,
     onUrlClicked: (url: String, text: String, range: TextRange) -> Unit = { _, _, _ -> },
-    state: TextKitState = rememberTextKitState(
-        "{}", false, createTextKitConfiguration()
-    )
+    state: TextKitState = rememberTextKitState("{}", createTextKitConfiguration())
 ) {
     val focusRequester = remember { FocusRequester() }
     var isHoveringLink by rememberSaveable { mutableStateOf(false) }
@@ -123,9 +121,7 @@ private fun handleUndoRedoShortcut(event: KeyEvent, state: TextKitState): Boolea
 fun TextKitEditorOutlined(
     modifier: Modifier = Modifier,
     onUrlClicked: (url: String, text: String, range: TextRange) -> Unit = { _, _, _ -> },
-    state: TextKitState = rememberTextKitState(
-        "{}", false, createTextKitConfiguration()
-    )
+    state: TextKitState = rememberTextKitState("{}", createTextKitConfiguration())
 ) {
     val focusRequester = remember { FocusRequester() }
     var isHoveringLink by rememberSaveable { mutableStateOf(false) }

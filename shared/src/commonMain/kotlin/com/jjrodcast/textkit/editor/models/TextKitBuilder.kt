@@ -17,6 +17,8 @@ class TextKitBuilder {
 
     private var embedsEnabled: Boolean = true
 
+    private var viewerMode: Boolean = false
+
     fun highlightColor(block: () -> Color) {
         this.highlightColor = block()
     }
@@ -41,6 +43,10 @@ class TextKitBuilder {
         this.embedsEnabled = block()
     }
 
+    fun viewerMode(block: () -> Boolean) {
+        this.viewerMode = block()
+    }
+
     fun build(): TextKitConfiguration {
         require(fontSize > 0) { "Font size cannot be less than 1" }
         // Trigger detection resolves a trigger by its char, so each char must be unique.
@@ -54,7 +60,8 @@ class TextKitBuilder {
             textColor,
             fontSize,
             triggers,
-            embedsEnabled
+            embedsEnabled,
+            viewerMode
         )
     }
 }

@@ -73,10 +73,12 @@ state to drive your UI:
 ```kotlin
 val state = rememberTextKitState(
     json = document,          // initial document (ProseMirror-style JSON)
-    isViewer = false,         // true = read-only
-    // configuration = ...    // colors, default font size, triggers (see Configuration)
+    // configuration = ...    // colors, default font size, triggers, viewerMode (see Configuration)
 )
 ```
+
+Read-only (viewer) mode, colors, the default font size and triggers are all set on the
+`configuration` — see [Configuration](#configuration) and [Read-only / viewer mode](#read-only--viewer-mode).
 
 Observable properties you can read in composition:
 
@@ -431,6 +433,7 @@ val configuration = createTextKitConfiguration {
     linkColor { Color(0xFF1B75D0) }
     textColor { Color(0xFF000000) }
     fontSize { 14 }                                          // default font size
+    viewerMode { false }                                     // true = read-only viewer
     embedsEnabled { true }                                   // false = disable inserting/opening embeds
     addTrigger { TextKitTrigger.TextKitMentionTrigger() }    // '@' mentions
     addTrigger { TextKitTrigger.TextKitHashtagTrigger() }    // '#' hashtags
@@ -445,11 +448,12 @@ must be unique (the builder throws on duplicates). At runtime you can resolve a 
 
 ## Read-only / viewer mode
 
-Set `isViewer = true` to load a document for display without editing, and render
-`annotatedStringForViewer` (it includes inline content such as task-list checkboxes):
+Set `viewerMode { true }` on the configuration to load a document for display without editing, and
+render `annotatedStringForViewer` (it includes inline content such as task-list checkboxes):
 
 ```kotlin
-val state = rememberTextKitState(json = document, isViewer = true)
+val configuration = createTextKitConfiguration { viewerMode { true } }
+val state = rememberTextKitState(json = document, configuration = configuration)
 
 val (annotated, inlineContent) = state.annotatedStringForViewer
 Text(text = annotated, inlineContent = inlineContent)
