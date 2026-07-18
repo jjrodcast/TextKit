@@ -109,10 +109,10 @@ private fun handleUndoRedoShortcut(event: KeyEvent, state: TextKitState): Boolea
     if (event.type != KeyEventType.KeyDown) return false
     val modifier = event.isCtrlPressed || event.isMetaPressed
     if (!modifier) return false
-    return when {
-        event.key == Key.Z && !event.isShiftPressed -> state.undo()
-        event.key == Key.Z && event.isShiftPressed -> state.redo()
-        event.key == Key.Y -> state.redo()
+    return when (event.key) {
+        Key.Z if !event.isShiftPressed -> state.undo()
+        Key.Z if event.isShiftPressed -> state.redo()
+        Key.Y -> state.redo()
         else -> false
     }
 }

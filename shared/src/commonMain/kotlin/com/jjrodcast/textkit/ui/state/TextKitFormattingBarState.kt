@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
@@ -15,7 +16,9 @@ import com.jjrodcast.textkit.editor.core.parser.ItalicMark
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
+import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
+import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 import com.jjrodcast.textkit.ui.utils.restore
 import com.jjrodcast.textkit.ui.utils.save
 
@@ -25,12 +28,15 @@ import com.jjrodcast.textkit.ui.utils.save
  * The state reflects which formatting toggles (bold, italic, list type, …) are active at the
  * caret, so the [com.jjrodcast.textkit.ui.TextKitFormattingBar] can highlight them. Keep it in
  * sync with the editor via [TextKitFormattingBarState.syncFrom].
+ *
+ * @param colors The palette shown in the text-color picker popup. Re-applied on every composition,
+ * so it is caller-owned configuration (not persisted through the [TextKitFormattingBarState.Saver]).
  */
 @Composable
-fun rememberTextKitFormattingBarState(): TextKitFormattingBarState {
+fun rememberTextKitFormattingBarState(colors: List<Color> = emptyList()): TextKitFormattingBarState {
     return rememberSaveable(saver = TextKitFormattingBarState.Saver) {
         TextKitFormattingBarState()
-    }
+    }.also { it.colors = colors }
 }
 
 /**
@@ -51,6 +57,7 @@ class TextKitFormattingBarState(
     isUnderline: Boolean = false,
     isStrikethrough: Boolean = false,
     isHighlight: Boolean = false,
+    isTextStyle: Boolean = false,
     isLink: Boolean = false,
     listItem: TextEditorDecoratorItem = TextEditorListItem.None,
 ) {
@@ -76,6 +83,16 @@ class TextKitFormattingBarState(
     var listItem by mutableStateOf(listItem)
         private set
 
+    var isTextStyle by mutableStateOf(isTextStyle)
+        private set
+
+    /**
+     * Palette shown in the text-color picker popup. Set from [rememberTextKitFormattingBarState];
+     * read by [com.jjrodcast.textkit.ui.TextKitFormattingBar].
+     */
+    var colors by mutableStateOf<List<Color>>(emptyList())
+        internal set
+
     val isNumberedList get() = listItem == TextEditorListItem.NumberedList
 
     val isBulletedList get() = listItem == TextEditorListItem.BulletedList
@@ -94,6 +111,7 @@ class TextKitFormattingBarState(
         isStrikethrough = marks.any { it is StrikeMark }
         isHighlight = marks.any { it is HighlightMark }
         isLink = marks.any { it is LinkMark }
+        isTextStyle = marks.any { it is TextStyleMark }
         this.listItem = listItem
     }
 
@@ -107,6 +125,7 @@ class TextKitFormattingBarState(
                     save(it.isUnderline),
                     save(it.isStrikethrough),
                     save(it.isHighlight),
+                    save(it.isTextStyle),
                     save(it.isLink),
                     save(it.listItem.toTag()),
                 )
@@ -120,8 +139,9 @@ class TextKitFormattingBarState(
                     isUnderline = restore(list[2])!!,
                     isStrikethrough = restore(list[3])!!,
                     isHighlight = restore(list[4])!!,
-                    isLink = restore(list[5])!!,
-                    listItem = restore<String>(list[6])!!.toListItem(),
+                    isTextStyle = restore(list[5])!!,
+                    isLink = restore(list[6])!!,
+                    listItem = restore<String>(list[7])!!.toListItem(),
                 )
             }
         )

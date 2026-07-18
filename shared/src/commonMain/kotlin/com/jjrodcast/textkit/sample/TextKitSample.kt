@@ -18,6 +18,7 @@ import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.editor.models.TextKitTrigger
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.DocumentUtils
+import com.jjrodcast.textkit.ui.TextKitColorsPopup
 import com.jjrodcast.textkit.ui.TextKitEditor
 import com.jjrodcast.textkit.ui.TextKitEmbedPopup
 import com.jjrodcast.textkit.ui.TextKitFormattingBar
@@ -29,6 +30,7 @@ import com.jjrodcast.textkit.ui.model.TextKitCommand
 import com.jjrodcast.textkit.ui.model.TextKitTokenSuggestion
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
+import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 
 // A demo table (ProseMirror shape) inserted by the "Insertar tabla" button. It is stored verbatim on
 // the placeholder piece and re-emitted on toJson(); the editor only shows the "📊 Tabla" chip.
@@ -89,9 +91,7 @@ private val sampleCommands = listOf(
 
 @Composable
 fun TextKitSample() {
-    val barState = rememberTextKitFormattingBarState()
-    // Enable the trigger flows: '@' mentions, '#' hashtags (atomic chips) and '/' slash commands
-    // (ephemeral text insertion).
+    val barState = rememberTextKitFormattingBarState(colors = TextKitPickerPallete.DefaultPallete)
     val configuration = remember {
         createTextKitConfiguration {
             addTrigger { TextKitTrigger.TextKitMentionTrigger() }
@@ -100,7 +100,7 @@ fun TextKitSample() {
         }
     }
     val state =
-        rememberTextKitState(json = DocumentUtils.complexJsonV2, configuration = configuration)
+        rememberTextKitState(json = DocumentUtils.complexJsonV1, configuration = configuration)
 
     LaunchedEffect(state.lastMarks, state.lastListItem) {
         barState.syncFrom(state.lastMarks, state.lastListItem)
@@ -117,6 +117,7 @@ fun TextKitSample() {
             onStrikeThroughClick = state::applyStrikeThrough,
             onHighlightClick = state::applyHighlight,
             onLinkClick = { state.applyLink() },
+            onTextAndColorClick = { state.openColorPicker(it) },
             onOrderedListClick = state::toggleOrderedList,
             onBulletedListClick = state::toggleUnorderedList,
             onUndoClick = { state.undo() },
@@ -131,10 +132,22 @@ fun TextKitSample() {
             modifier = Modifier.padding(horizontal = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            OutlinedButton(onClick = { state.insertEmbed(EmbedTypes.Table, DEMO_TABLE_JSON, "📊 Tabla") }) {
+            OutlinedButton(onClick = {
+                state.insertEmbed(
+                    EmbedTypes.Table,
+                    DEMO_TABLE_JSON,
+                    "📊 Tabla"
+                )
+            }) {
                 Text("Insertar tabla")
             }
-            OutlinedButton(onClick = { state.insertEmbed(EmbedTypes.Image, DEMO_IMAGE_JSON, "🖼 Imagen") }) {
+            OutlinedButton(onClick = {
+                state.insertEmbed(
+                    EmbedTypes.Image,
+                    DEMO_IMAGE_JSON,
+                    "🖼 Imagen"
+                )
+            }) {
                 Text("Insertar imagen")
             }
         }
@@ -148,6 +161,10 @@ fun TextKitSample() {
             )
             // Popup for embedded blocks: renders the table and offers "Eliminar".
             TextKitEmbedPopup(state = state)
+            TextKitColorsPopup(
+                state = state,
+                colors = barState.colors
+            )
             TextKitLinkPopup(
                 state = state,
                 onEdit = { link ->

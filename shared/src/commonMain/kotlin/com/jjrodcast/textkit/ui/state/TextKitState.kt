@@ -1,6 +1,5 @@
 package com.jjrodcast.textkit.ui.state
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -19,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
@@ -71,6 +71,7 @@ import com.jjrodcast.textkit.ui.model.TextKitLinkInfo
 import com.jjrodcast.textkit.ui.utils.createStyle
 import com.jjrodcast.textkit.ui.utils.restore
 import com.jjrodcast.textkit.ui.utils.save
+import com.jjrodcast.textkit.ui.utils.toColorInt
 
 /**
  * A state object that can be used to remember the state of a RichText component across recomposition.
@@ -145,6 +146,37 @@ class TextKitState(
      */
     var lastListItem by mutableStateOf<TextEditorDecoratorItem>(TextEditorListItem.None)
         private set
+
+    /**
+     * Color of the text at the caret/selection ([lastMarks]'s text-style mark), or null when the
+     * text has no explicit color. Observe it to seed a color picker's initial selection — e.g. pass
+     * it as `defaultTextColor` to [com.jjrodcast.textkit.ui.TextKitFormattingBar] so the current
+     * color is marked when the picker opens (and nothing is marked when there is none).
+     */
+    val currentTextColor: Color?
+        get() = (lastMarks.firstOrNull { it is TextStyleMark } as? TextStyleMark)
+            ?.attrs?.color
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Color(it.toColorInt()) }.getOrNull() }
+
+    /**
+     * Window-coordinate bounds the colors popup is anchored to while open, or null when it is closed.
+     * Mirrors the [activeLink] pattern: observe it to show
+     * [com.jjrodcast.textkit.ui.TextKitColorsPopup], which reads [currentTextColor] to mark the active
+     * swatch and calls [applyTextColor] to write the pick back to the editor.
+     */
+    var activeColorAnchor by mutableStateOf<Rect?>(null)
+        private set
+
+    /** Opens the colors popup anchored at [anchor] (e.g. the formatting bar's palette button bounds). */
+    fun openColorPicker(anchor: Rect) {
+        activeColorAnchor = anchor
+    }
+
+    /** Closes the colors popup. */
+    fun dismissColorPicker() {
+        activeColorAnchor = null
+    }
 
     internal var textLayoutResult: TextLayoutResult? by mutableStateOf(null)
         private set
@@ -369,6 +401,34 @@ class TextKitState(
             TextStyleMark(TextStyleAttrs(fontSize = fontSize, color = color)),
             selected = true
         )
+
+    /**
+     * Changes only the text [color] (a hex string such as `#FF0000`, or null to reset to the
+     * configured default color) over the current selection, keeping whatever font size the text
+     * already has. Prefer this over [applyTextStyle] for a color picker: passing `fontSize = 0`
+     * to [applyTextStyle] would render the text at 0sp. With a collapsed caret the color is stored
+     * for the next typed text. Returns whether the state changed.
+     */
+    fun applyTextColor(color: String?): Boolean {
+        val target = markTarget()
+        if (target.collapsed) {
+            // Store a color-only text style so the next typed characters inherit it, keeping any
+            // font size already stored at the caret (falling back to the configured default).
+            val size = (lastMarks.firstOrNull { it is TextStyleMark } as? TextStyleMark)
+                ?.attrs?.fontSize ?: configuration.fontSize
+            lastMarks = lastMarks.filterNotTo(mutableSetOf()) { it is TextStyleMark } +
+                TextStyleMark(TextStyleAttrs(color = color, fontSize = size))
+            return true
+        }
+        // The Color transaction resolves the marks from the selection itself (preserving font size),
+        // so prev/curr marks are ignored here.
+        return updateDocument(
+            target,
+            TextEditorSelectedMark(marks = lastMarks, listItemSelectedValue = lastListItem),
+            TextEditorSelectedMark(marks = lastMarks, listItemSelectedValue = lastListItem),
+            transactionType = TextEditorTransactionType.Color(color)
+        )
+    }
 
     /**
      * Applies a heading of [level] (1..6) by setting the matching heading font size (see
