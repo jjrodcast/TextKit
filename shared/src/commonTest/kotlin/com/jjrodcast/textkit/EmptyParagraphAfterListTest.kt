@@ -2,6 +2,7 @@ package com.jjrodcast.textkit
 
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
+import com.jjrodcast.textkit.editor.utils.TABS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -48,7 +49,7 @@ class EmptyParagraphAfterListTest {
     fun caretAtStartOfSecondListItem_staysMarkedAsList() {
         val editor = editorFrom(listThenEmptyThenText)
         // Boundary right after the first item's line break and before the second item's marker.
-        val startOfSecond = editor.offsetOf("		2.")
+        val startOfSecond = editor.offsetOf("${TABS}2.")
         assertEquals(
             TextEditorListItem.NumberedList,
             editor.getSearchMarkType(TextRange(startOfSecond)).listItem,
