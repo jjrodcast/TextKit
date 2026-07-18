@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.OutlinedButton
@@ -109,6 +111,7 @@ fun TextKitSample() {
 
     TextKitScreen {
         TextKitFormattingBar(
+            modifier = Modifier.fillMaxWidth(),
             barState = barState,
             selectedColor = Color.Yellow,
             onBoldClick = state::applyBold,
@@ -157,7 +160,9 @@ fun TextKitSample() {
         Box {
             TextKitEditor(
                 state = state,
-                modifier = Modifier.padding(10.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp)
             )
             // Popup for embedded blocks: renders the table and offers "Eliminar".
             TextKitEmbedPopup(state = state)

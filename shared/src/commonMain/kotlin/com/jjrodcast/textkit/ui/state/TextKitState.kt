@@ -1234,12 +1234,12 @@ class TextKitState(
          * including after process death — so it is taken live from here instead of being serialized
          * and rebuilt. This keeps the triggers fully dynamic: whatever the caller configured (custom
          * subclasses included) is restored as-is, with no hardcoded per-char reconstruction. Only the
-         * editing state (text, selection, document, viewer flag) is persisted.
+         * editing state (the document JSON and the caret/selection) is persisted; the plain text and
+         * paragraph structure are rebuilt from the JSON on restore via `setup()`.
          */
         fun saver(configuration: TextKitConfiguration) = Saver<TextKitState, Any>(
             save = {
                 arrayListOf(
-                    save(it.textFieldValue.text),
                     save(it.selection, TextRangeSaver, this),
                     save(it.toJson()),
                 )
@@ -1247,18 +1247,14 @@ class TextKitState(
             restore = {
                 @Suppress("UNCHECKED_CAST")
                 val list = it as List<Any>
-                val textFieldValue = TextFieldValue(
-                    text = restore(list[0])!!,
-                    selection = restore(list[1], TextRangeSaver)!!
-                )
-                val json: String = restore(list[2])!!
-
-                val state = TextKitState(json, configuration)
-                    .also { state ->
-                        state.textFieldValue = textFieldValue
-                        state.updateAnnotatedString(state.textFieldValue.selection)
-                    }
-                state
+                val selection: TextRange = restore(list[list.size - 2], TextRangeSaver)!!
+                val json: String = restore(list[list.size - 1])!!
+                TextKitState(json, configuration).apply {
+                    setup()
+                    updateAnnotatedString(selection)
+                    this.selection = textFieldValue.selection
+                    readSelectionContext()
+                }
             }
         )
 
