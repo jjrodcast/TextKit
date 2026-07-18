@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 class ListToggleTest {
 
     private fun stateWith(json: String): TextKitState =
-        TextKitState(json, false, createTextKitConfiguration()).apply { setup() }
+        TextKitState(json, createTextKitConfiguration()).apply { setup() }
 
     private fun TextKitState.caretAt(offset: Int) =
         onTextFieldChange(textFieldValue.copy(selection = TextRange(offset)))

@@ -30,6 +30,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run unit tests
+        run: ./gradlew :shared:allTests --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: shared/build/reports/tests/
+
       - name: Resolve version
         id: version
         run: |
