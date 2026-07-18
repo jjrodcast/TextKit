@@ -94,7 +94,7 @@ Observable properties you can read in composition:
 | `activeColorAnchor` | `Rect?` | Window bounds the color picker is anchored to while open, or `null`. Observe it to show `TextKitColorsPopup`. |
 | `currentTextColor` | `Color?` | The selection's current text color, or `null` when it has none. Seeds the color picker's marked swatch. |
 | `canUndo` / `canRedo` | `Boolean` | Whether an undo / redo step is available (drives toolbar button enablement). |
-| `annotatedStringForViewer` | `Pair<AnnotatedString, Map<String, InlineTextContent>>` | Rendered content for read-only display. |
+| `viewerTextValue` | `Pair<AnnotatedString, Map<String, InlineTextContent>>` | Rendered content for read-only display. |
 
 ## Reading the content
 
@@ -498,7 +498,7 @@ render `annotatedStringForViewer` (it includes inline content such as task-list 
 val configuration = createTextKitConfiguration { viewerMode { true } }
 val state = rememberTextKitState(json = document, configuration = configuration)
 
-val (annotated, inlineContent) = state.annotatedStringForViewer
+val (annotated, inlineContent) = state.viewerTextValue
 Text(text = annotated, inlineContent = inlineContent)
 ```
 
