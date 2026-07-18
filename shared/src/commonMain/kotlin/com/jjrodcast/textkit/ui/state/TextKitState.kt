@@ -148,6 +148,15 @@ class TextKitState(
         private set
 
     /**
+     * Embed type at the collapsed caret (`"table"`, `"image"`, `"document"`, …), or an empty string
+     * when the caret is not on an embed placeholder. Captured alongside [lastMarks] when the
+     * selection moves, so the formatting bar can reflect whether the caret sits on an embedded block
+     * without re-querying the document.
+     */
+    var lastEmbedType by mutableStateOf("")
+        private set
+
+    /**
      * Color of the text at the caret/selection ([lastMarks]'s text-style mark), or null when the
      * text has no explicit color. Observe it to seed a color picker's initial selection — e.g. pass
      * it as `defaultTextColor` to [com.jjrodcast.textkit.ui.TextKitFormattingBar] so the current
@@ -649,6 +658,7 @@ class TextKitState(
         val searchType = getSelectedMarksWithType()
         lastMarks = searchType.marks
         lastListItem = searchType.listItem
+        lastEmbedType = embedTypeAtCaret()
     }
 
     /**
@@ -704,6 +714,19 @@ class TextKitState(
     }
 
     /**
+     * Embed type touching the collapsed caret, or "" when there is none. An embed placeholder is an
+     * atomic token, so the caret never rests *inside* it — it snaps to a boundary (the placeholder's
+     * start or end). We therefore probe both the caret offset and the one just before it, so the
+     * embed is detected whether the caret sits just before or just after its placeholder.
+     */
+    private fun embedTypeAtCaret(): String {
+        val caret = selection.min
+        val info = manager.embedAt(caret)
+            ?: caret.takeIf { it > 0 }?.let { manager.embedAt(it - 1) }
+        return info?.embedType ?: ""
+    }
+
+    /**
      * Refreshes the stored caret context ([lastMarks] + [lastListItem]) from a single document
      * query so both stay in sync with the current selection.
      *
@@ -718,6 +741,7 @@ class TextKitState(
         val searchType = getSelectedMarksWithType()
         lastMarks = searchType.marks
         lastListItem = searchType.listItem
+        lastEmbedType = embedTypeAtCaret()
         updateLinkHighlight(searchType)
         notifyLinkAtSelection(searchType)
     }
@@ -811,6 +835,9 @@ class TextKitState(
             )
             selection = TextRange(range.max)
             updateAnnotatedString(selection)
+            // Refresh the caret context so the formatting bar reflects the just-inserted embed
+            // (lastEmbedType) without waiting for the next selection change.
+            readSelectionContext()
             true
         }
     }
@@ -834,6 +861,9 @@ class TextKitState(
             manager.removeEmbedAt(info.range)
             selection = TextRange(info.range.min)
             updateAnnotatedString(selection)
+            // Refresh the caret context so the formatting bar drops the removed embed's selection
+            // (lastEmbedType) instead of keeping it marked.
+            readSelectionContext()
             true
         }
         dismissEmbedPopup()
@@ -920,6 +950,7 @@ class TextKitState(
                 tokenState.refreshQuery(textFieldValue.text, selection)
                 // Editing shifts offsets, so a remembered selection is no longer valid.
                 lastRangeSelection = TextRange.Zero
+                lastEmbedType = embedTypeAtCaret()
             }
             result
         }
@@ -938,6 +969,7 @@ class TextKitState(
                 tokenState.refreshQuery(textFieldValue.text, selection)
                 // Editing shifts offsets, so a remembered selection is no longer valid.
                 lastRangeSelection = TextRange.Zero
+                lastEmbedType = embedTypeAtCaret()
             }
             result
         }
@@ -1027,6 +1059,9 @@ class TextKitState(
             ?: return false
         selection = caret
         updateAnnotatedString(caret)
+        // Deleting an atomic token (e.g. an embed placeholder) moves the caret off it; refresh so
+        // the formatting bar drops the removed embed's selection.
+        lastEmbedType = embedTypeAtCaret()
         return true
     }
 

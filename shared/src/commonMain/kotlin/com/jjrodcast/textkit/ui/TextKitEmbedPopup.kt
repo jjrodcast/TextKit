@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
+import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.ui.state.TextKitState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -138,14 +139,14 @@ private fun EmbedPopupContent(
             HorizontalDivider()
 
             when (embed.embedType) {
-                "image" -> Image(
+                EmbedTypes.Image -> Image(
                     painter = painterResource(Res.drawable.text_kit_banner),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                 )
 
-                "table" -> {
+                EmbedTypes.Table -> {
                     val rows = remember(embed.rawJson) { parseTableRows(embed.rawJson) }
                     if (rows.isNotEmpty()) TableView(rows)
                     else Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)

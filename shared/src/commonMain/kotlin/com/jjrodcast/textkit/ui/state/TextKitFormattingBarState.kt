@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
+import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.editor.core.parser.HighlightMark
 import com.jjrodcast.textkit.editor.core.parser.ItalicMark
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
@@ -18,7 +19,6 @@ import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
-import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 import com.jjrodcast.textkit.ui.utils.restore
 import com.jjrodcast.textkit.ui.utils.save
 
@@ -59,6 +59,7 @@ class TextKitFormattingBarState(
     isHighlight: Boolean = false,
     isTextStyle: Boolean = false,
     isLink: Boolean = false,
+    embedType: String = "",
     listItem: TextEditorDecoratorItem = TextEditorListItem.None,
 ) {
 
@@ -80,6 +81,10 @@ class TextKitFormattingBarState(
     var isLink by mutableStateOf(isLink)
         private set
 
+    var embedType by mutableStateOf(embedType)
+        private set
+
+
     var listItem by mutableStateOf(listItem)
         private set
 
@@ -99,12 +104,18 @@ class TextKitFormattingBarState(
 
     val isCheckList get() = listItem == TextEditorListItem.CheckList
 
+    val isTable get() = EmbedTypes.Table == embedType
+
+    val isImage get() = EmbedTypes.Image == embedType
+
+    val isDocument get() = EmbedTypes.Document == embedType
+
     /**
      * Recomputes every toggle from the marks and list-item type active at the current caret,
      * so the bar mirrors the editor selection. Wire this to [TextKitState.lastMarks] and
      * [TextKitState.lastListItem] whenever the selection moves.
      */
-    fun syncFrom(marks: Set<Mark>, listItem: TextEditorDecoratorItem) {
+    fun syncFrom(marks: Set<Mark>, listItem: TextEditorDecoratorItem, embedType: String) {
         isBold = marks.any { it is BoldMark }
         isItalic = marks.any { it is ItalicMark }
         isUnderline = marks.any { it is UnderlineMark }
@@ -112,6 +123,7 @@ class TextKitFormattingBarState(
         isHighlight = marks.any { it is HighlightMark }
         isLink = marks.any { it is LinkMark }
         isTextStyle = marks.any { it is TextStyleMark }
+        this.embedType = embedType
         this.listItem = listItem
     }
 
@@ -127,6 +139,7 @@ class TextKitFormattingBarState(
                     save(it.isHighlight),
                     save(it.isTextStyle),
                     save(it.isLink),
+                    save(it.embedType),
                     save(it.listItem.toTag()),
                 )
             },
@@ -141,7 +154,8 @@ class TextKitFormattingBarState(
                     isHighlight = restore(list[4])!!,
                     isTextStyle = restore(list[5])!!,
                     isLink = restore(list[6])!!,
-                    listItem = restore<String>(list[7])!!.toListItem(),
+                    embedType = restore(list[7])!!,
+                    listItem = restore<String>(list[8])!!.toListItem(),
                 )
             }
         )
