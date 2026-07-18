@@ -135,9 +135,10 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
         // For a collapsed caret the line-content walk resolves to the paragraph that ENDS at the
         // caret, so a caret sitting right after a list item's trailing line break inherits that
         // item's list type — even when it actually rests on the following (often empty) paragraph.
-        // Re-derive the list type from the paragraph that STARTS at the caret (peek one char
-        // forward) so an empty paragraph after a list is not marked as a list, while the start of a
-        // following list item still is.
+        // The forward paragraph is NOT present in that walk's data (data.size == 1 at the boundary),
+        // so it can't be derived in-layer; re-derive the list type from the paragraph that STARTS at
+        // the caret (peek one char forward) so an empty paragraph after a list is not marked as a
+        // list, while the start of a following list item still is.
         if (start != end) return base
         return base.copy(listItem = forwardListItemAt(start))
     }
@@ -151,9 +152,7 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
     private fun forwardListItemAt(offset: Int): TextEditorDecoratorItem {
         val end = (offset + 1).coerceAtMost(text.length)
         return pieceTable.getLineContent(offset, end)
-            .getAllModelsInRange()
-            .firstOrNull()
-            ?.paragraphType
+            .firstParagraphTypeInRange()
             ?: TextEditorListItem.None
     }
 
