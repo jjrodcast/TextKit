@@ -1,6 +1,7 @@
 package com.jjrodcast.textkit.editor.core.models
 
 import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
@@ -70,6 +71,25 @@ internal data class MultiPieceParagraph(
                 if (end == pieceEnd || intersect(start, end, pieceStart, pieceEnd)) add(model)
             }
         }
+    }
+
+    /**
+     * Paragraph type of the first paragraph holding a piece within [[start], [end]] — the same piece
+     * selection rule as [getAllModelsInRange] (`end == pieceEnd || intersect`), but returning on the
+     * first match with no list/model allocation. Used to resolve the list type at a caret cheaply on
+     * every selection change. Null when no piece falls in range.
+     */
+    fun firstParagraphTypeInRange(): TextEditorDecoratorItem? {
+        paragraphs.fastForEach { paragraph ->
+            paragraph.pieces.fastForEach { piece ->
+                val pieceStart = piece.offsetInDocument
+                val pieceEnd = pieceStart + piece.piece.length
+                if (end == pieceEnd || intersect(start, end, pieceStart, pieceEnd)) {
+                    return paragraph.paragraphType
+                }
+            }
+        }
+        return null
     }
 
     fun findSelectedParagraphIndicesByLevel(level: Int): List<Int> {
