@@ -3,6 +3,7 @@ package com.jjrodcast.textkit
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
+import com.jjrodcast.textkit.editor.utils.TABS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -91,11 +92,16 @@ class ListsAndDecoratorsTest {
     fun checkDecorator_is_true_inside_a_decorator_and_false_over_plain_text() {
         val editor = editorFrom(SampleDocuments.ORDERED_LIST)
 
-        val (insideDecorator, decoratorRange) = editor.checkDecorator(2, 2)
-        assertTrue(insideDecorator)
-        assertEquals(TextRange(0, 5), decoratorRange)
+        // The ordered-list marker in the flat stream is TABS + "1. ". TABS is
+        // platform-specific ("\t\t" on JVM/Android/Web, "\t" on iOS), so derive
+        // the decorator length instead of hard-coding the JVM layout.
+        val decoratorLength = TABS.length + "1. ".length
 
-        val (overText, _) = editor.checkDecorator(6, 7) // inside "one"
+        val (insideDecorator, decoratorRange) = editor.checkDecorator(1, 1)
+        assertTrue(insideDecorator)
+        assertEquals(TextRange(0, decoratorLength), decoratorRange)
+
+        val (overText, _) = editor.checkDecorator(decoratorLength + 1, decoratorLength + 2) // inside "one"
         assertFalse(overText)
     }
 

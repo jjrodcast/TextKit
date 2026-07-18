@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class LinkPopupSelectionTest {
 
     private fun stateWith(json: String): TextKitState =
-        TextKitState(json, false, createTextKitConfiguration()).apply { setup() }
+        TextKitState(json, createTextKitConfiguration()).apply { setup() }
 
     /** "visit test now" with the word "test" (offsets 6..10) linked to https://test.com. */
     private val paragraphWithLink = """

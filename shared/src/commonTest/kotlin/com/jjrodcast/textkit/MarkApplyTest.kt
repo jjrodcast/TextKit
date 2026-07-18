@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 class MarkApplyTest {
 
     private fun stateWith(json: String): TextKitState =
-        TextKitState(json, false, createTextKitConfiguration()).apply { setup() }
+        TextKitState(json, createTextKitConfiguration()).apply { setup() }
 
     @Test
     fun applyBold_onNonCollapsedSelection_appliesMark() {
