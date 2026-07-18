@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -35,8 +35,10 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.input.pointer.pointerInput
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
 import org.jetbrains.compose.resources.stringResource
@@ -58,7 +60,7 @@ fun TextKitEditor(
 
     BasicTextField(
         modifier = modifier
-            .background(MaterialTheme.colorScheme.surface)
+            .background(TextKitTheme.colors.background)
             .verticalScroll(rememberScrollState())
             .fillMaxWidth()
             .focusRequester(focusRequester)
@@ -93,10 +95,15 @@ fun TextKitEditor(
         onTextLayout = state::onTextLayout,
         visualTransformation = state.visualTransformation,
         onValueChange = state::onTextFieldChange,
+        textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
+        cursorBrush = SolidColor(TextKitTheme.colors.primary),
         decorationBox = { innerTextField ->
             Box {
                 if (state.textFieldValue.text.isEmpty()) {
-                    Text(text = stringResource(Res.string.type_text))
+                    Text(
+                        text = stringResource(Res.string.type_text),
+                        color = TextKitTheme.colors.onSurfaceVariant
+                    )
                 }
                 innerTextField()
             }
@@ -169,6 +176,8 @@ fun TextKitEditorOutlined(
         interactionSource = interactionSource,
         enabled = enabled,
         singleLine = singleLine,
+        textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
+        cursorBrush = SolidColor(TextKitTheme.colors.primary),
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
                 value = state.textFieldValue.text,
@@ -179,7 +188,10 @@ fun TextKitEditorOutlined(
                 interactionSource = interactionSource,
                 placeholder = {
                     if (state.textFieldValue.text.isEmpty()) {
-                        Text(text = stringResource(Res.string.type_text))
+                        Text(
+                            text = stringResource(Res.string.type_text),
+                            color = TextKitTheme.colors.onSurfaceVariant
+                        )
                     }
                 },
                 container = {

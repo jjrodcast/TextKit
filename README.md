@@ -28,6 +28,7 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 - [Embedded blocks](#embedded-blocks)
 - [Undo / redo](#undo--redo)
 - [Formatting bar](#formatting-bar)
+- [Theming (light & dark)](#theming-light--dark)
 - [Configuration](#configuration)
 - [Read-only / viewer mode](#read-only--viewer-mode)
 - [Document format](#document-format)
@@ -461,6 +462,48 @@ once a color is picked. By default it applies the pick with
 `state.activeColorAnchor` (observable anchor, non-null while open), `state.applyTextColor(hex)`
 (set only the color, keeping the current font size; `null` resets to the default color), and
 `state.currentTextColor` (`Color?`, the selection's current color or `null`).
+
+## Theming (light & dark)
+
+TextKit ships a light/dark-aware theme built on a Material 3–style role system. Every TextKit UI
+piece — the editor, formatting bar and popups — reads its colors, typography and shapes from
+`TextKitTheme`, so the whole editor follows one palette and switches with the system.
+
+| Light | Dark |
+|-------|------|
+| ![TextKit light theme](imgs/text_kit_light.png) | ![TextKit dark theme](imgs/text_kit_dark.png) |
+
+Wrap your UI in the `TextKitTheme` provider (or use `TextKitScreen`, which already does), then read
+tokens through the `TextKitTheme` accessor:
+
+```kotlin
+TextKitTheme(darkTheme = isSystemInDarkTheme()) {
+    Box {
+        TextKitFormattingBar(barState = barState, /* … */)
+        TextKitEditor(state = state)
+        // popups…
+    }
+}
+
+// Read tokens anywhere inside that scope:
+TextKitTheme.colors.primary
+TextKitTheme.typography.fontFamily
+TextKitTheme.shapes.medium
+```
+
+Override individual color roles without touching the rest — the light/dark factories expose every
+role as a parameter that defaults to its token:
+
+```kotlin
+TextKitTheme(
+    darkTheme = isDark,
+    colors = TextKitColors.dark(primary = myBrandColor),   // only primary changes
+) { /* … */ }
+```
+
+Reading `TextKitTheme.colors` must happen inside a `TextKitTheme { }` scope (there is no silent
+fallback). For the full color-role reference, the pairing rule, how to choose between similar roles,
+and guidance on customizing typography/shapes, see **[docs/theming](docs/theming/README.md)**.
 
 ## Configuration
 

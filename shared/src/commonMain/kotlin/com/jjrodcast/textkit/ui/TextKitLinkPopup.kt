@@ -22,7 +22,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.model.TextKitLinkInfo
 import com.jjrodcast.textkit.ui.state.TextKitState
 import org.jetbrains.compose.resources.stringResource
@@ -107,7 +107,7 @@ fun TextKitLinkPopup(
         val maxWidth = constraints.maxWidth
         val maxHeight = constraints.maxHeight
         var cardSize by remember { mutableStateOf(IntSize.Zero) }
-        val containerColor = MaterialTheme.colorScheme.surface
+        val containerColor = TextKitTheme.colors.surface
 
         // Keep the card inside the container: clamp X to the right edge, and place it below the
         // link — flipping above when it would overflow the bottom. The card's own height already
@@ -260,7 +260,7 @@ private fun LinkPopupContent(
     onRemove: (TextKitLinkInfo) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surface,
+    containerColor: Color = TextKitTheme.colors.surface,
     shape: Shape = RoundedCornerShape(CardCornerRadius),
     contentPadding: PaddingValues = PaddingValues(ContentPadding),
 ) {
@@ -269,7 +269,10 @@ private fun LinkPopupContent(
     Card(
         modifier = modifier.widthIn(max = 320.dp),
         shape = shape,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = TextKitTheme.colors.onSurface
+        ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
     ) {
         Column(
@@ -337,7 +340,7 @@ private fun LinkPopupContent(
 @Preview(showBackground = true)
 @Composable
 private fun TextKitLinkPopupPreview() {
-    MaterialTheme {
+    TextKitTheme {
         LinkPopupContent(
             link = TextKitLinkInfo(
                 text = "TextKit repository",

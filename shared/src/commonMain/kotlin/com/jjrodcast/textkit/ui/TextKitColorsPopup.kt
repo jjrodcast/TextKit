@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.jjrodcast.textkit.editor.utils.toHexWithAlpha
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
 import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 import com.jjrodcast.textkit.ui.utils.TextKitPopupAnchorProvider
@@ -63,7 +63,10 @@ fun TextKitColorsPopup(
     ) {
         Card(
             modifier = modifier.widthIn(max = 320.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(
+                containerColor = TextKitTheme.colors.surface,
+                contentColor = TextKitTheme.colors.onSurface
+            ),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
         ) {
             Column(

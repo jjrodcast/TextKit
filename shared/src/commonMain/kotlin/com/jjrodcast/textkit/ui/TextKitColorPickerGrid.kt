@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 
 @Composable
@@ -37,6 +38,8 @@ fun TextKitColorPickerGrid(
     columns: Int = 8,
 ) {
     val defaultModifier = Modifier.aspectRatio(1f).clip(CircleShape)
+    val selectedBorder = TextKitTheme.colors.primary
+    val unselectedBorder = TextKitTheme.colors.outlineVariant
 
     LazyVerticalGrid(
         modifier = modifier,
@@ -55,7 +58,7 @@ fun TextKitColorPickerGrid(
                         .background(Color.White)
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) Color.Black else Color.LightGray,
+                            color = if (isSelected) selectedBorder else unselectedBorder,
                             shape = CircleShape
                         )
                         .clickable { onColorSelected(null) }
@@ -100,12 +103,14 @@ fun TextKitColorPickerGrid(
 private fun ColorPickerGridPreview() {
     var selected by remember { mutableStateOf<Color?>(Color.Red) }
 
-    TextKitColorPickerGrid(
-        modifier = Modifier.padding(8.dp),
-        colors = TextKitPickerPallete.DefaultPallete,
-        selected = selected,
-        onColorSelected = {
-            selected = it
-        }
-    )
+    TextKitTheme {
+        TextKitColorPickerGrid(
+            modifier = Modifier.padding(8.dp),
+            colors = TextKitPickerPallete.DefaultPallete,
+            selected = selected,
+            onColorSelected = {
+                selected = it
+            }
+        )
+    }
 }

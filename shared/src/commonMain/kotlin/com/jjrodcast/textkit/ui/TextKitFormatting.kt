@@ -88,8 +88,15 @@ fun TextKitScreen(
     content: @Composable () -> Unit
 ) {
     TextKitTheme {
-        Scaffold { innerPadding ->
-            Column(modifier = modifier.padding(innerPadding)) {
+        Scaffold(
+            containerColor = TextKitTheme.colors.background,
+            contentColor = TextKitTheme.colors.onBackground
+        ) { innerPadding ->
+            Column(
+                modifier = modifier
+                    .background(TextKitTheme.colors.background)
+                    .padding(innerPadding)
+            ) {
                 content()
             }
         }
@@ -175,6 +182,7 @@ fun TextKitFormattingBarInternal(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
                 .height(IntrinsicSize.Min)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
         ) {
             TextKitTooltipFormattingItem(
                 tooltipText = stringResource(Res.string.bold_text),
@@ -374,6 +382,9 @@ fun TextKitFormattingItem(
             // BasicTextField on click, collapsing the active selection before the format action runs,
             // so marks would never reach the selected range.
             .focusProperties { canFocus = false }
+            // Outer margin so a selected item's highlight rect doesn't touch its neighbors and each
+            // item has breathing room in its normal state.
+            .padding(horizontal = 2.dp, vertical = 2.dp)
             .toggleable(
                 value = value,
                 onValueChange = onValueChange,
@@ -383,9 +394,9 @@ fun TextKitFormattingItem(
             )
             .background(
                 color = if (value) backgroundColor else Color.Unspecified,
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(6.dp)
             )
-            .padding(6.dp)
+            .padding(8.dp)
     ) {
         Icon(
             painter = painter,
@@ -397,7 +408,7 @@ fun TextKitFormattingItem(
 @Composable
 fun TextKitFormattingDivider(
     modifier: Modifier = Modifier,
-    color: Color = TextKitTheme.colors.onSurface.copy(alpha = 0.12f)
+    color: Color = TextKitTheme.colors.outlineVariant
 ) {
     VerticalDivider(
         modifier = modifier.fillMaxHeight().padding(vertical = 4.dp),

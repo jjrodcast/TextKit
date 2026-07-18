@@ -10,12 +10,23 @@ import textkit.shared.generated.resources.Res
 import textkit.shared.generated.resources.noto_sans_italic_variable_font
 import textkit.shared.generated.resources.noto_sans_variable_font
 
+/**
+ * The typography used by TextKit UI and rendered content.
+ *
+ * Obtain the active instance with `TextKitTheme.typography` inside a [TextKitTheme] scope.
+ *
+ * @property fontFamily The font family applied to editor text and TextKit controls.
+ */
 @Immutable
 data class TextKitTypography(
     val fontFamily: FontFamily
 ) {
 
     companion object {
+        /**
+         * The default typography. [fontFamily] defaults to the bundled Noto Sans (regular + italic);
+         * pass a custom [FontFamily] to override it. Composable because loading font resources is.
+         */
         @Composable
         fun default(
             fontFamily: FontFamily = notoSansFamily()
