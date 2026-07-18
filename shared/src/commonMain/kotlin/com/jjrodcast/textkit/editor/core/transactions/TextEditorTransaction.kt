@@ -2,6 +2,7 @@ package com.jjrodcast.textkit.editor.core.transactions
 
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorDecoratorItem
+import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.converters.PieceTableConverter
 import com.jjrodcast.textkit.editor.core.converters.TextEditorConverter
 import com.jjrodcast.textkit.editor.core.interfaces.TextEditorInitTransaction
@@ -130,7 +131,30 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
         end: Int,
         configuration: TextKitConfiguration
     ): MarkSearchType {
-        return pieceTable.getLineContent(start, end).getMarksWithType(configuration)
+        val base = pieceTable.getLineContent(start, end).getMarksWithType(configuration)
+        // For a collapsed caret the line-content walk resolves to the paragraph that ENDS at the
+        // caret, so a caret sitting right after a list item's trailing line break inherits that
+        // item's list type — even when it actually rests on the following (often empty) paragraph.
+        // Re-derive the list type from the paragraph that STARTS at the caret (peek one char
+        // forward) so an empty paragraph after a list is not marked as a list, while the start of a
+        // following list item still is.
+        if (start != end) return base
+        return base.copy(listItem = forwardListItemAt(start))
+    }
+
+    /**
+     * List type of the paragraph the collapsed caret at [offset] belongs to, resolved forward: the
+     * first piece of the range `[offset, offset + 1)` carries its paragraph's type (a bare line-break
+     * piece for an empty paragraph yields [TextEditorListItem.None]; a list item's decorator yields
+     * its list type). At the document end the range collapses and falls back to the last paragraph.
+     */
+    private fun forwardListItemAt(offset: Int): TextEditorDecoratorItem {
+        val end = (offset + 1).coerceAtMost(text.length)
+        return pieceTable.getLineContent(offset, end)
+            .getAllModelsInRange()
+            .firstOrNull()
+            ?.paragraphType
+            ?: TextEditorListItem.None
     }
 
     override fun containsDecorator(start: Int, end: Int): Pair<Boolean, TextRange> {
