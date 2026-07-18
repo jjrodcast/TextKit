@@ -1,8 +1,11 @@
 package com.jjrodcast.textkit.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,15 +45,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.ui.state.TextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
+import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 import org.jetbrains.compose.resources.stringResource
 import textkit.shared.generated.resources.Res
 import textkit.shared.generated.resources.bold_text
@@ -70,8 +80,6 @@ fun TextKitScreen(
     content: @Composable () -> Unit
 ) {
     MaterialTheme {
-        // height(IntrinsicSize.Min) makes the Row as tall as its tallest child (a FormattingItem),
-        // so the separator's fillMaxHeight resolves to the item height instead of the whole bar.
         Scaffold(modifier) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding)) {
                 content()
@@ -82,8 +90,9 @@ fun TextKitScreen(
 
 @Composable
 fun TextKitFormattingBar(
-    barState: TextKitFormattingBarState = rememberTextKitFormattingBarState(),
     selectedColor: Color,
+    modifier: Modifier = Modifier,
+    barState: TextKitFormattingBarState = rememberTextKitFormattingBarState(),
     onBoldClick: (Boolean) -> Unit = {},
     onItalicClick: (Boolean) -> Unit = {},
     onUnderlineClick: (Boolean) -> Unit = {},
@@ -92,32 +101,58 @@ fun TextKitFormattingBar(
     onLinkClick: (Boolean) -> Unit = {},
     onOrderedListClick: (Boolean) -> Unit = {},
     onBulletedListClick: (Boolean) -> Unit = {},
+    onTextAndColorClick: (Rect) -> Unit = {},
     onUndoClick: () -> Unit = {},
     onRedoClick: () -> Unit = {},
     canUndo: Boolean = false,
-    canRedo: Boolean = false,
-    modifier: Modifier = Modifier
+    canRedo: Boolean = false
 ) {
-    Row(modifier = modifier.height(IntrinsicSize.Min)) {
-        TextKitTooltipFormattingItem(
-            tooltipText = stringResource(Res.string.undo_text),
-            rememberVectorPainter(Icons.AutoMirrored.Rounded.Undo),
-            onClick = { onUndoClick() },
-            value = false,
-            backgroundColor = selectedColor,
-            enabled = canUndo
-        )
-        TextKitFormattingSeparator()
-        TextKitTooltipFormattingItem(
-            tooltipText = stringResource(Res.string.redo_text),
-            rememberVectorPainter(Icons.AutoMirrored.Rounded.Redo),
-            onClick = { onRedoClick() },
-            value = false,
-            backgroundColor = selectedColor,
-            enabled = canRedo
-        )
-        TextKitFormattingDivider()
-        TextKitFormattingSeparator()
+    TextKitFormattingBarInternal(
+        selectedColor = selectedColor,
+        modifier = modifier,
+        barState = barState,
+        onBoldClick = onBoldClick,
+        onItalicClick = onItalicClick,
+        onUnderlineClick = onUnderlineClick,
+        onStrikeThroughClick = onStrikeThroughClick,
+        onHighlightClick = onHighlightClick,
+        onSizeAndColorClick = onTextAndColorClick,
+        onLinkClick = onLinkClick,
+        onOrderedListClick = onOrderedListClick,
+        onBulletedListClick = onBulletedListClick,
+        onUndoClick = onUndoClick,
+        onRedoClick = onRedoClick,
+        canUndo = canUndo,
+        canRedo = canRedo
+    )
+}
+
+@Composable
+fun TextKitFormattingBarInternal(
+    selectedColor: Color,
+    modifier: Modifier = Modifier,
+    barState: TextKitFormattingBarState = rememberTextKitFormattingBarState(),
+    onBoldClick: (Boolean) -> Unit = {},
+    onItalicClick: (Boolean) -> Unit = {},
+    onUnderlineClick: (Boolean) -> Unit = {},
+    onStrikeThroughClick: (Boolean) -> Unit = {},
+    onHighlightClick: (Boolean) -> Unit = {},
+    onSizeAndColorClick: (Rect) -> Unit = {},
+    onLinkClick: (Boolean) -> Unit = {},
+    onOrderedListClick: (Boolean) -> Unit = {},
+    onBulletedListClick: (Boolean) -> Unit = {},
+    onUndoClick: () -> Unit = {},
+    onRedoClick: () -> Unit = {},
+    canUndo: Boolean = false,
+    canRedo: Boolean = false
+) {
+    var textSizeAndColorBounds by remember { mutableStateOf(Rect.Zero) }
+
+    Row(
+        modifier = modifier
+            .horizontalScroll(rememberScrollState())
+            .height(IntrinsicSize.Min)
+    ) {
         TextKitTooltipFormattingItem(
             tooltipText = stringResource(Res.string.bold_text),
             rememberVectorPainter(Icons.Rounded.FormatBold),
@@ -157,6 +192,17 @@ fun TextKitFormattingBar(
             value = barState.isHighlight,
             backgroundColor = selectedColor
         )
+        TextKitFormattingSeparator()
+        TextKitTooltipFormattingItem(
+            tooltipText = stringResource(Res.string.text_color_text),
+            rememberVectorPainter(Icons.Outlined.Palette),
+            value = false,
+            isExpandable = true,
+            onClick = { onSizeAndColorClick(textSizeAndColorBounds) },
+            modifier = Modifier.onGloballyPositioned {
+                textSizeAndColorBounds = it.boundsInWindow()
+            }
+        )
         TextKitFormattingDivider()
         TextKitFormattingSeparator()
         TextKitTooltipFormattingItem(
@@ -186,10 +232,21 @@ fun TextKitFormattingBar(
         TextKitFormattingDivider()
         TextKitFormattingSeparator()
         TextKitTooltipFormattingItem(
-            tooltipText = stringResource(Res.string.text_color_text),
-            rememberVectorPainter(Icons.Outlined.Palette),
+            tooltipText = stringResource(Res.string.undo_text),
+            rememberVectorPainter(Icons.AutoMirrored.Rounded.Undo),
+            onClick = { onUndoClick() },
             value = false,
-            onClick = {}
+            backgroundColor = selectedColor,
+            enabled = canUndo
+        )
+        TextKitFormattingSeparator()
+        TextKitTooltipFormattingItem(
+            tooltipText = stringResource(Res.string.redo_text),
+            rememberVectorPainter(Icons.AutoMirrored.Rounded.Redo),
+            onClick = { onRedoClick() },
+            value = false,
+            backgroundColor = selectedColor,
+            enabled = canRedo
         )
     }
 }
@@ -199,6 +256,7 @@ fun TextKitTooltipFormattingItem(
     tooltipText: String,
     painter: Painter,
     value: Boolean,
+    isExpandable: Boolean = false,
     onClick: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     backgroundColor: Color = Color.Unspecified,
@@ -216,15 +274,40 @@ fun TextKitTooltipFormattingItem(
             }
         }
     ) {
-        TextKitFormattingItem(
-            painter = painter,
-            value = value,
-            onValueChange = onClick,
-            backgroundColor = backgroundColor,
-            enabled = enabled
-        )
+        val indicatorColor =
+            MaterialTheme.colorScheme.secondary.copy(alpha = if (enabled) 1f else 0.38f)
+        Box {
+            TextKitFormattingItem(
+                painter = painter,
+                value = value,
+                onValueChange = onClick,
+                backgroundColor = backgroundColor,
+                enabled = enabled
+            )
+            if (isExpandable) {
+                TextKitItemExpandableIndicator(indicatorColor)
+            }
+        }
     }
+}
 
+@Composable
+private fun BoxScope.TextKitItemExpandableIndicator(indicatorColor: Color) {
+    Canvas(
+        modifier = Modifier
+            .padding(2.dp)
+            .size(6.dp)
+            .align(Alignment.BottomEnd)
+    ) {
+        val path = Path().apply {
+            moveTo(size.width, size.height)     // right corner
+            lineTo(0f, size.height)             // lower left
+            lineTo(size.width, 0f)              // upper right
+            close()
+        }
+
+        drawPath(path = path, color = indicatorColor)
+    }
 }
 
 @Composable
@@ -287,6 +370,7 @@ private fun TextKitFormattingSeparator(
 private fun TextKitFormattingBarPreview() {
     MaterialTheme {
         TextKitFormattingBar(
+            barState = rememberTextKitFormattingBarState(colors = TextKitPickerPallete.DefaultPallete),
             selectedColor = Color.Yellow
         )
     }

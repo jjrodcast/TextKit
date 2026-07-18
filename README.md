@@ -91,6 +91,8 @@ Observable properties you can read in composition:
 | `activeTrigger` | `TextKitTrigger?` | The trigger currently being composed (`@`/`#`/`/`…), or `null`. Drives which candidate set the popup shows. |
 | `tokenQuery` | `String?` | Text typed after the active trigger char, or `null` when no trigger is being composed. |
 | `activeEmbed` | `EmbedInfo?` | The embedded block under the caret/tap, or `null`. Observe it to show an embed popup. |
+| `activeColorAnchor` | `Rect?` | Window bounds the color picker is anchored to while open, or `null`. Observe it to show `TextKitColorsPopup`. |
+| `currentTextColor` | `Color?` | The selection's current text color, or `null` when it has none. Seeds the color picker's marked swatch. |
 | `canUndo` / `canRedo` | `Boolean` | Whether an undo / redo step is available (drives toolbar button enablement). |
 | `annotatedStringForViewer` | `Pair<AnnotatedString, Map<String, InlineTextContent>>` | Rendered content for read-only display. |
 
@@ -382,7 +384,9 @@ import com.jjrodcast.textkit.ui.TextKitFormattingBar
 import com.jjrodcast.textkit.ui.TextKitScreen
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 
-val barState = rememberTextKitFormattingBarState()
+// `colors` is the palette exposed as `barState.colors` for the text-color popup (see below);
+// it defaults to TextKitPickerPallete.DefaultPallete.
+val barState = rememberTextKitFormattingBarState(colors = TextKitPickerPallete.DefaultPallete)
 
 // Mirror the caret's active marks/list into the bar so toggles highlight correctly:
 LaunchedEffect(state.lastMarks, state.lastListItem) {
@@ -399,6 +403,7 @@ TextKitScreen { // MaterialTheme + Scaffold wrapper (optional)
         onStrikeThroughClick = state::applyStrikeThrough,
         onHighlightClick = state::applyHighlight,
         onLinkClick = { state.applyLink() },
+        onTextAndColorClick = { state.openColorPicker(it) },
         onOrderedListClick = state::toggleOrderedList,
         onBulletedListClick = state::toggleUnorderedList,
         onUndoClick = { state.undo() },
@@ -409,6 +414,7 @@ TextKitScreen { // MaterialTheme + Scaffold wrapper (optional)
     Box {
         TextKitEditor(state = state)
         TextKitLinkPopup(state = state, /* onEdit / onRemove */)
+        TextKitColorsPopup(state = state, colors = barState.colors)
         TextKitTokenPopup(state = state) { /* users / tags by active trigger */ users }
         TextKitSlashCommandPopup(state = state, commands = commands)
     }
@@ -418,6 +424,43 @@ TextKitScreen { // MaterialTheme + Scaffold wrapper (optional)
 Each `on…Click` receives a `Boolean` (the new toggle value). `TextKitFormattingBarState` exposes
 `isBold`, `isItalic`, `isUnderline`, `isStrikethrough`, `isHighlight`, `isLink`, `isNumberedList`,
 `isBulletedList`, `isCheckList`.
+
+### Text color popup
+
+The palette button is different: `onTextAndColorClick` is **not** a toggle — it hands you the button's
+bounds in window coordinates (`Rect`). Wire it to `state.openColorPicker(bounds)` and render
+`TextKitColorsPopup` next to the editor. It follows the same pattern as [Links](#links): the popup is
+driven by editor state (`state.activeColorAnchor`), applies the pick back to the document, and marks
+the selection's current color (`state.currentTextColor`) so it round-trips both ways.
+
+```kotlin
+import com.jjrodcast.textkit.ui.TextKitColorsPopup
+
+TextKitFormattingBar(
+    barState = barState,
+    selectedColor = Color.Yellow,
+    onTextAndColorClick = { bounds -> state.openColorPicker(bounds) }, // open the picker
+    // … other on…Click handlers
+)
+
+Box {
+    TextKitEditor(state = state)
+    // Palette to show; a leading "no color" swatch (emits null → reset to default) is always added.
+    TextKitColorsPopup(state = state, colors = barState.colors)
+}
+```
+
+`TextKitColorsPopup` positions itself relative to the button (below it, flipping above when it would
+overflow the bottom and clamping horizontally, so it always fits the screen) and closes automatically
+once a color is picked. By default it applies the pick with
+`state.applyTextColor(hex)` (or resets to the configured color on the "no color" swatch); override
+`onColorSelected` / `onClose` to customize. The palette also has a default
+(`TextKitPickerPallete.DefaultPallete`), so `colors` is optional.
+
+**Related state APIs:** `state.openColorPicker(bounds)` / `state.dismissColorPicker()` (show/hide),
+`state.activeColorAnchor` (observable anchor, non-null while open), `state.applyTextColor(hex)`
+(set only the color, keeping the current font size; `null` resets to the default color), and
+`state.currentTextColor` (`Color?`, the selection's current color or `null`).
 
 ## Configuration
 
