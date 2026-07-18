@@ -1247,18 +1247,12 @@ class TextKitState(
             restore = {
                 @Suppress("UNCHECKED_CAST")
                 val list = it as List<Any>
-                val selection: TextRange = restore(list[0], TextRangeSaver)!!
-                val json: String = restore(list[1])!!
-
-                // Rebuild the full document from the persisted JSON: `setup()` reloads the piece-table
-                // manager (which backs `paragraphs`/`toJson()`), otherwise the lazy manager stays empty
-                // and the field re-renders blank — the document appears lost after a configuration
-                // change (rotation, dark-theme toggle). Then reapply the saved caret, mirroring
-                // `applyRestoredHistory`.
+                val selection: TextRange = restore(list[list.size - 2], TextRangeSaver)!!
+                val json: String = restore(list[list.size - 1])!!
                 TextKitState(json, configuration).apply {
                     setup()
-                    this.selection = selection
                     updateAnnotatedString(selection)
+                    this.selection = textFieldValue.selection
                     readSelectionContext()
                 }
             }
