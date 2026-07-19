@@ -14,22 +14,25 @@ import androidx.compose.runtime.remember
  * [LocalTextKitTheme]. Wrap TextKit UI in this so `TextKitTheme.colors` / `.typography` / `.shapes`
  * resolve; reading them outside a provider throws.
  *
- * [colors] defaults to the light or dark palette based on the system setting, so the theme switches
- * reactively when the system (or a passed override) changes. Override any parameter to customize.
+ * [darkTheme] controls whether the default palette is light or dark; by default it tracks the system
+ * setting. Pass [colors] to fully override the palette (independent of [darkTheme]). Override any
+ * parameter to customize.
  *
+ * @param darkTheme Whether to use the dark palette when [colors] is not explicitly provided.
  * @param colors The color palette to expose. Defaults to [TextKitColors.dark]/[TextKitColors.light]
- *   per [isSystemInDarkTheme].
+ *   per [darkTheme].
  * @param typography The typography to expose.
  * @param shapes The corner shapes to expose.
  * @param content UI that reads the theme through the [TextKitTheme] accessor.
  */
 @Composable
 fun TextKitTheme(
-    colors: TextKitColors = if (isSystemInDarkTheme()) TextKitColors.dark() else TextKitColors.light(),
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    colors: TextKitColors = if (darkTheme) TextKitColors.dark() else TextKitColors.light(),
     typography: TextKitTypography = TextKitTypography.default(),
     shapes: TextKitShapes = TextKitShapes(),
     content: @Composable () -> Unit
-) {
+)
     val theme = TextKitTheme(
         colors = colors,
         typography = typography,
