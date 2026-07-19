@@ -32,6 +32,9 @@ class TextEditorItem internal constructor(
     /** The embedded block's JSON (verbatim), or null when this item is not an embed. */
     val embedPayload get() = if (isEmbed) token?.payload else null
 
+    /** The embed placeholder's visible label (e.g. "📊 Table"), or null when this item is not an embed. */
+    val embedLabel get() = if (isEmbed) token?.attrs?.label else null
+
     companion object {
         internal fun from(model: TextEditorModel) = TextEditorItem(
             text = model.text,

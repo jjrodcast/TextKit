@@ -333,6 +333,9 @@ class TextKitState(
         selection = restoredSelection
         updateAnnotatedString(restoredSelection)
         readSelectionContext()
+        // Refresh the open embed popup (if any) so a document-level undo/redo of a table edit is
+        // reflected in the live editor: the re-derived JSON flows back into the table, which reloads.
+        activeEmbed = activeEmbed?.let { manager.embedAt(it.range.min) }
         syncHistoryAvailability()
     }
 
@@ -821,6 +824,20 @@ class TextKitState(
         private set
 
     /**
+     * User drag delta (px) applied on top of the embed popup's anchored position; `Offset.Zero` means
+     * the popup sits where it is anchored. Lets the user drag the popup somewhere visible (e.g. when
+     * the anchor is off-screen in landscape). Reset whenever a new embed opens; persisted across
+     * configuration changes so the popup keeps its place after a rotation.
+     */
+    var embedPopupOffset by mutableStateOf(Offset.Zero)
+        private set
+
+    /** Accumulates a drag on the embed popup so the user can reposition it. */
+    fun dragEmbedPopup(delta: Offset) {
+        embedPopupOffset += delta
+    }
+
+    /**
      * Opens the embed popup when [position] (text-field local coordinates) sits on a placeholder.
      * Returns true when it opened one, so the caller can consume the click.
      */
@@ -830,12 +847,25 @@ class TextKitState(
         val offset = layout.getOffsetForPosition(position).coerceIn(0, textFieldValue.text.length)
         val info = manager.embedAt(offset) ?: return false
         activeEmbed = info
+        embedPopupOffset = Offset.Zero
+        // Start a fresh coalescing run so this embed's edits don't merge with a previous session.
+        manager.breakHistoryCoalescing()
         return true
     }
 
     /** Closes the embed popup. */
     fun dismissEmbedPopup() {
         activeEmbed = null
+        embedPopupOffset = Offset.Zero
+        // End the embed's coalescing run so the next unrelated edit is a separate undo step.
+        manager.breakHistoryCoalescing()
+    }
+
+    /** Restores the open embed (by document offset) and its drag offset after a state restore. */
+    internal fun restoreEmbedPopup(embedOffset: Int, popupOffset: Offset) {
+        if (embedOffset < 0) return
+        activeEmbed = manager.embedAt(embedOffset) ?: return
+        embedPopupOffset = popupOffset
     }
 
     /** Bounding box of the active embed placeholder (to anchor its popup), or null. */
@@ -863,16 +893,24 @@ class TextKitState(
         }
     }
 
-    /** Replaces the JSON of the currently open embed (one undo step). */
+    /**
+     * Replaces the JSON of the currently open embed. Consecutive updates to the same embed **coalesce
+     * into a single undo step** (via [recordBefore]'s coalescing), so a table's live auto-sync — which
+     * fires on every keystroke/action — collapses to one global editor step instead of flooding it.
+     * The run ends when the popup closes/opens ([dismissEmbedPopup]/[openEmbedAt]) or any other edit
+     * happens.
+     */
     fun updateActiveEmbed(rawJson: String): Boolean {
         val info = activeEmbed ?: return false
-        val changed = recordBefore {
+        return recordBefore(coalesceKey = "embed:${info.range.min}", breakAfter = false) {
             manager.updateEmbedAt(info.range, rawJson)
             updateAnnotatedString(selection)
             true
         }
-        if (changed) activeEmbed = manager.embedAt(info.range.min)
-        return changed
+        // Intentionally does NOT reassign `activeEmbed`: the editor UI (e.g. the editable table) is the
+        // source of truth for its own live edits, and reassigning would change `activeEmbed.rawJson`
+        // on every keystroke, recomposing the whole popup and disrupting the focused text field.
+        // External changes (document-level undo/redo) refresh `activeEmbed` via applyRestoredHistory.
     }
 
     /** Removes the currently open embed and closes its popup (one undo step). */
@@ -1298,18 +1336,26 @@ class TextKitState(
                 arrayListOf(
                     save(it.selection, TextRangeSaver, this),
                     save(it.toJson()),
+                    // Keep the embed popup open (and where the user dragged it) across rotation.
+                    save(it.activeEmbed?.range?.min ?: -1),
+                    save(it.embedPopupOffset.x),
+                    save(it.embedPopupOffset.y),
                 )
             },
             restore = {
                 @Suppress("UNCHECKED_CAST")
                 val list = it as List<Any>
-                val selection: TextRange = restore(list[list.size - 2], TextRangeSaver)!!
-                val json: String = restore(list[list.size - 1])!!
+                val selection: TextRange = restore(list[0], TextRangeSaver)!!
+                val json: String = restore(list[1])!!
+                val embedOffset: Int = restore(list[2]) ?: -1
+                val popupX: Float = restore(list[3]) ?: 0f
+                val popupY: Float = restore(list[4]) ?: 0f
                 TextKitState(json, configuration).apply {
                     setup()
                     updateAnnotatedString(selection)
                     this.selection = textFieldValue.selection
                     readSelectionContext()
+                    restoreEmbedPopup(embedOffset, Offset(popupX, popupY))
                 }
             }
         )
