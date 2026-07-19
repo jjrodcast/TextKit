@@ -821,6 +821,20 @@ class TextKitState(
         private set
 
     /**
+     * User drag delta (px) applied on top of the embed popup's anchored position; `Offset.Zero` means
+     * the popup sits where it is anchored. Lets the user drag the popup somewhere visible (e.g. when
+     * the anchor is off-screen in landscape). Reset whenever a new embed opens; persisted across
+     * configuration changes so the popup keeps its place after a rotation.
+     */
+    var embedPopupOffset by mutableStateOf(Offset.Zero)
+        private set
+
+    /** Accumulates a drag on the embed popup so the user can reposition it. */
+    fun dragEmbedPopup(delta: Offset) {
+        embedPopupOffset += delta
+    }
+
+    /**
      * Opens the embed popup when [position] (text-field local coordinates) sits on a placeholder.
      * Returns true when it opened one, so the caller can consume the click.
      */
@@ -830,12 +844,21 @@ class TextKitState(
         val offset = layout.getOffsetForPosition(position).coerceIn(0, textFieldValue.text.length)
         val info = manager.embedAt(offset) ?: return false
         activeEmbed = info
+        embedPopupOffset = Offset.Zero
         return true
     }
 
     /** Closes the embed popup. */
     fun dismissEmbedPopup() {
         activeEmbed = null
+        embedPopupOffset = Offset.Zero
+    }
+
+    /** Restores the open embed (by document offset) and its drag offset after a state restore. */
+    internal fun restoreEmbedPopup(embedOffset: Int, popupOffset: Offset) {
+        if (embedOffset < 0) return
+        activeEmbed = manager.embedAt(embedOffset) ?: return
+        embedPopupOffset = popupOffset
     }
 
     /** Bounding box of the active embed placeholder (to anchor its popup), or null. */
@@ -1298,18 +1321,26 @@ class TextKitState(
                 arrayListOf(
                     save(it.selection, TextRangeSaver, this),
                     save(it.toJson()),
+                    // Keep the embed popup open (and where the user dragged it) across rotation.
+                    save(it.activeEmbed?.range?.min ?: -1),
+                    save(it.embedPopupOffset.x),
+                    save(it.embedPopupOffset.y),
                 )
             },
             restore = {
                 @Suppress("UNCHECKED_CAST")
                 val list = it as List<Any>
-                val selection: TextRange = restore(list[list.size - 2], TextRangeSaver)!!
-                val json: String = restore(list[list.size - 1])!!
+                val selection: TextRange = restore(list[0], TextRangeSaver)!!
+                val json: String = restore(list[1])!!
+                val embedOffset: Int = restore(list[2]) ?: -1
+                val popupX: Float = restore(list[3]) ?: 0f
+                val popupY: Float = restore(list[4]) ?: 0f
                 TextKitState(json, configuration).apply {
                     setup()
                     updateAnnotatedString(selection)
                     this.selection = textFieldValue.selection
                     readSelectionContext()
+                    restoreEmbedPopup(embedOffset, Offset(popupX, popupY))
                 }
             }
         )

@@ -1,10 +1,13 @@
 package com.jjrodcast.textkit.sample
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -14,6 +17,7 @@ import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.editor.models.TextKitTrigger
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 import com.jjrodcast.textkit.editor.utils.DocumentUtils
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.TextKitColorsPopup
 import com.jjrodcast.textkit.ui.TextKitEditor
 import com.jjrodcast.textkit.ui.TextKitEmbedPopup
@@ -26,6 +30,7 @@ import com.jjrodcast.textkit.ui.model.TextKitCommand
 import com.jjrodcast.textkit.ui.model.TextKitTokenSuggestion
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
+import com.jjrodcast.textkit.ui.table.TextKitEditableTable
 import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 
 // A demo table (ProseMirror shape) inserted by the "Insertar tabla" button. It is stored verbatim on
@@ -167,4 +172,29 @@ fun TextKitSample() {
             TextKitSlashCommandPopup(state = state, commands = sampleCommands)
         }
     }
+}
+
+@Composable
+fun TextKitTable() {
+    TextKitTheme {
+        Scaffold(
+            containerColor = TextKitTheme.colors.background,
+            contentColor = TextKitTheme.colors.onBackground
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .background(TextKitTheme.colors.background)
+                    .padding(innerPadding)
+            ) {
+                TextKitEditableTable(
+                    rawJson = DEMO_TABLE_JSON,
+                    onSync = { json ->
+                        println("json $json")
+                    },
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+        }
+    }
+
 }

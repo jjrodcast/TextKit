@@ -1,8 +1,7 @@
 package com.jjrodcast.textkit.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,12 +13,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,10 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -48,11 +47,7 @@ import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import com.jjrodcast.textkit.ui.table.TextKitEditableTable
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import textkit.shared.generated.resources.Res
@@ -83,6 +78,7 @@ fun TextKitEmbedPopup(
     modifier: Modifier = Modifier,
     onClose: () -> Unit = { state.dismissEmbedPopup() },
     onRemove: () -> Unit = { state.removeActiveEmbed() },
+    onSync: (String) -> Unit = { state.updateActiveEmbed(it) },
 ) {
     val embed = state.activeEmbed ?: return
     val anchor = state.activeEmbedBoundingBox() ?: return
@@ -93,17 +89,29 @@ fun TextKitEmbedPopup(
         val maxW = constraints.maxWidth
         val maxH = constraints.maxHeight
         var cardSize by remember { mutableStateOf(IntSize.Zero) }
+        val dragOffset = state.embedPopupOffset
 
-        // Clamp X within the container; place below the placeholder, flipping above if it overflows.
-        val x = anchor.left.roundToInt().coerceIn(0, (maxW - cardSize.width).coerceAtLeast(0))
+        // Anchored base position: below the placeholder, flipping above if it would overflow.
+        val baseX = anchor.left.roundToInt()
         val below = anchor.bottom.roundToInt() + gap
         val above = anchor.top.roundToInt() - gap - cardSize.height
-        val y = if (below + cardSize.height <= maxH || above < 0) below else above
+        val baseY = if (below + cardSize.height <= maxH || above < 0) below else above
+
+        // Add the user's drag, then clamp so the card stays fully on-screen — this is what keeps a
+        // large table popup reachable in landscape, where the anchor may sit off the visible area.
+        val x = (baseX + dragOffset.x.roundToInt()).coerceIn(0, (maxW - cardSize.width).coerceAtLeast(0))
+        val y = (baseY + dragOffset.y.roundToInt()).coerceIn(0, (maxH - cardSize.height).coerceAtLeast(0))
+
+        // Never let the card exceed the viewport height; its content scrolls within this cap.
+        val availableHeight = with(density) { maxH.toDp() } - 16.dp
 
         EmbedPopupContent(
             embed = embed,
             onClose = onClose,
             onRemove = onRemove,
+            onSync = onSync,
+            onDrag = { state.dragEmbedPopup(it) },
+            maxHeight = availableHeight,
             modifier = Modifier
                 .offset { IntOffset(x, y) }
                 .onSizeChanged { cardSize = it },
@@ -116,10 +124,15 @@ private fun EmbedPopupContent(
     embed: TextKitEditorManager.EmbedInfo,
     onClose: () -> Unit,
     onRemove: () -> Unit,
+    onSync: (String) -> Unit,
+    onDrag: (Offset) -> Unit,
+    maxHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
+    // Tables carry an inline editor (with a side rail), so give them more room than image/document.
+    val maxWidth = if (embed.embedType == EmbedTypes.Table) 460.dp else 360.dp
     Card(
-        modifier = modifier.widthIn(max = 360.dp),
+        modifier = modifier.widthIn(max = maxWidth).heightIn(max = maxHeight),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = TextKitTheme.colors.surface,
@@ -131,11 +144,28 @@ private fun EmbedPopupContent(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Header doubles as a drag handle so the popup can be moved anywhere on screen.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(embed.range) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            onDrag(dragAmount)
+                        }
+                    },
+            ) {
+                Icon(
+                    Icons.Rounded.DragIndicator,
+                    contentDescription = null,
+                    tint = TextKitTheme.colors.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
                 Text(
                     text = embed.embedType.replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).padding(start = 6.dp),
                 )
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Rounded.Close, contentDescription = stringResource(Res.string.close_text))
@@ -143,22 +173,25 @@ private fun EmbedPopupContent(
             }
             HorizontalDivider()
 
-            when (embed.embedType) {
-                EmbedTypes.Image -> Image(
-                    painter = painterResource(Res.drawable.text_kit_banner),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
-                )
+            // The body flexes to the available height (fill = false keeps small embeds compact) and
+            // its own scroll handles anything taller than the capped popup.
+            Box(modifier = Modifier.weight(1f, fill = false)) {
+                when (embed.embedType) {
+                    EmbedTypes.Image -> Image(
+                        painter = painterResource(Res.drawable.text_kit_banner),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+                    )
 
-                EmbedTypes.Table -> {
-                    val rows = remember(embed.rawJson) { parseTableRows(embed.rawJson) }
-                    if (rows.isNotEmpty()) TableView(rows)
-                    else Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)
+                    EmbedTypes.Table -> TextKitEditableTable(
+                        rawJson = embed.rawJson,
+                        onSync = onSync,
+                    )
+
+                    // Any other embed: show the stored JSON so it is at least inspectable.
+                    else -> Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)
                 }
-
-                // Any other embed: show the stored JSON so it is at least inspectable.
-                else -> Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -175,63 +208,3 @@ private fun EmbedPopupContent(
     }
 }
 
-/** A parsed table row: its cell texts and whether it is a header row. */
-private data class DemoTableRow(val cells: List<String>, val isHeader: Boolean)
-
-@Composable
-private fun TableView(rows: List<DemoTableRow>) {
-    Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-        rows.forEach { row ->
-            Row {
-                row.cells.forEach { cell ->
-                    Box(
-                        modifier = Modifier
-                            .width(120.dp)
-                            .border(BorderStroke(1.dp, TextKitTheme.colors.outlineVariant))
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            text = cell,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (row.isHeader) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private val lenientJson = Json { ignoreUnknownKeys = true }
-
-/**
- * Parses a ProseMirror `table` JSON into rows of cell texts. Returns an empty list for non-tables or
- * malformed input (the popup then falls back to showing the raw JSON).
- */
-private fun parseTableRows(rawJson: String): List<DemoTableRow> = runCatching {
-    val table = lenientJson.parseToJsonElement(rawJson).jsonObject
-    if (table["type"]?.jsonPrimitive?.content != "table") return emptyList()
-    val rows = table["content"]?.jsonArray ?: return emptyList()
-    rows.map { rowElement ->
-        val cells = rowElement.jsonObject["content"]?.jsonArray ?: JsonArray(emptyList())
-        var isHeader = false
-        val texts = cells.map { cellElement ->
-            val cell = cellElement.jsonObject
-            if (cell["type"]?.jsonPrimitive?.content == "tableHeader") isHeader = true
-            cellText(cell["content"]?.jsonArray)
-        }
-        DemoTableRow(cells = texts, isHeader = isHeader)
-    }
-}.getOrElse { emptyList() }
-
-/** Concatenates all `text` leaves inside a cell's paragraph content. */
-private fun cellText(paragraphs: JsonArray?): String {
-    if (paragraphs == null) return ""
-    val builder = StringBuilder()
-    paragraphs.forEach { paragraph ->
-        paragraph.jsonObject["content"]?.jsonArray?.forEach { inline ->
-            inline.jsonObject["text"]?.jsonPrimitive?.content?.let { builder.append(it) }
-        }
-    }
-    return builder.toString()
-}
