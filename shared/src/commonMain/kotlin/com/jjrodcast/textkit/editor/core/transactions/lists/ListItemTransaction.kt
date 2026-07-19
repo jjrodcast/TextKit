@@ -142,7 +142,17 @@ internal object ListItemTransaction {
         val flattenItems = PositionalListItemUtils.reorderItems(items = positionalListItems, coerceLevel = false)
         val transactions = flattenItems.createTransactions()
         val length = flattenItems.firstOrNull { it.index == currentIndex }.getNewDecoratorLength()
-        return Pair(transactions, TextRange(start = range.start - length, end = range.end - length))
+        // Clamp both endpoints at 0: for the first item `range.start` is at/near the document
+        // start, so subtracting the removed decorator width would otherwise underflow and make
+        // `TextRange` throw. For any non-first item `range.start - length` is already >= 0, so
+        // the coercion is a no-op there.
+        return Pair(
+            transactions,
+            TextRange(
+                start = (range.start - length).coerceAtLeast(0),
+                end = (range.end - length).coerceAtLeast(0)
+            )
+        )
     }
 
     private fun updateNestedListItems(

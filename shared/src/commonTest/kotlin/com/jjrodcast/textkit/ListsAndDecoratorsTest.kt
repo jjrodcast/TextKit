@@ -67,6 +67,49 @@ class ListsAndDecoratorsTest {
     }
 
     @Test
+    fun converts_the_first_ordered_list_item_back_to_a_paragraph() {
+        val editor = editorFrom(SampleDocuments.ORDERED_LIST)
+        // First item text "one" starts at offset 0 — the case that used to underflow TextRange.
+        val one = editor.rangeOf("one")
+
+        assertTrue(
+            editor.toListItem(one, from = TextEditorListItem.NumberedList, to = TextEditorListItem.None)
+        )
+
+        // The first paragraph loses its decorator; the second list item is untouched.
+        val paragraphs = editor.getParagraphs()
+        assertFalse(paragraphs.first().children.any { it.decorator != null })
+        assertTrue(paragraphs.last().children.first().decorator is TextDecoratorModel.NumberDecoratorModel)
+    }
+
+    @Test
+    fun converts_the_first_bulleted_list_item_back_to_a_paragraph() {
+        // Start from a plain paragraph at offset 0, make it a bullet, then convert it back — the
+        // same first-item path, to show the fix is not specific to numbered lists.
+        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
+        editor.toListItem(TextRange(0, 5), TextEditorListItem.None, TextEditorListItem.BulletedList)
+
+        assertTrue(
+            editor.toListItem(TextRange(0, 5), TextEditorListItem.BulletedList, TextEditorListItem.None)
+        )
+
+        assertTrue(firstDecorator(editor) == null)
+    }
+
+    @Test
+    fun converts_the_first_task_list_item_back_to_a_paragraph_with_a_collapsed_caret() {
+        // A collapsed caret at offset 0 is the other way into the first-item path, and task lists
+        // have the widest decorator — so this underflowed the furthest before the fix.
+        val editor = editorFrom(SampleDocuments.TASK_LIST)
+
+        assertTrue(
+            editor.toListItem(TextRange(0, 0), from = TextEditorListItem.CheckList, to = TextEditorListItem.None)
+        )
+
+        assertTrue(firstDecorator(editor) == null)
+    }
+
+    @Test
     fun loaded_ordered_list_exposes_number_decorators_on_each_item() {
         val editor = editorFrom(SampleDocuments.ORDERED_LIST)
 
