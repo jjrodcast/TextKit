@@ -1,7 +1,6 @@
 package com.jjrodcast.textkit.theme
 
 import androidx.compose.foundation.shape.CornerBasedShape
-import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Immutable
 import com.jjrodcast.textkit.theme.tokens.TextKitShapeTokens
 
