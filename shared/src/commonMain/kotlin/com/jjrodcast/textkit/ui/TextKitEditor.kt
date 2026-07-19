@@ -58,6 +58,10 @@ fun TextKitEditor(
         state.onUrlClicked = onUrlClicked
     }
 
+    // Highlight-mark background tracks the theme (unless the config pinned its own color).
+    val highlightColor = TextKitTheme.colors.highlight
+    LaunchedEffect(highlightColor) { state.setThemeHighlightColor(highlightColor) }
+
     BasicTextField(
         modifier = modifier
             .background(TextKitTheme.colors.background)
@@ -140,6 +144,10 @@ fun TextKitEditorOutlined(
     LaunchedEffect(Unit) {
         state.onUrlClicked = onUrlClicked
     }
+
+    // Highlight-mark background tracks the theme (unless the config pinned its own color).
+    val highlightColor = TextKitTheme.colors.highlight
+    LaunchedEffect(highlightColor) { state.setThemeHighlightColor(highlightColor) }
 
     val interactionSource = remember { MutableInteractionSource() }
     val enabled = true

@@ -47,6 +47,7 @@ override it.
 | `primary` | Main accent: active/selected states (e.g. the toggled formatting-bar button background, cursor/caret), primary actions | `onPrimary` |
 | `primaryContainer` | Softer accent surfaces tied to primary: highlighted chips, selected embed placeholders, subtle emphasis | `onPrimaryContainer` |
 | `secondary` | Supporting accent for smaller UI cues (e.g. the expandable-item indicator) | `onSecondary` |
+| `highlight` | Background of text carrying the **highlight mark**. A warm amber, deliberately off the teal `primary` family so it stays distinct from the text selection painted over it | `onHighlight` |
 | `background` | The editor’s base surface (the `BasicTextField` area) | `onBackground` |
 | `surface` | Raised containers: the formatting bar `Card`, popups, tooltips, menus | `onSurface` |
 | `surfaceVariant` | Secondary/muted surfaces and muted content: popup sections, placeholder text, disabled backgrounds | `onSurfaceVariant` |
@@ -77,6 +78,18 @@ Box(Modifier.background(TextKitTheme.colors.primary)) {
   (input fields); `outlineVariant` for low-emphasis separators (dividers).
 - **`primary` vs `primaryContainer`** — `primary` is a strong fill with light content on top;
   `primaryContainer` is a tinted, low-contrast fill for subtle highlights.
+- **`highlight` vs `primaryContainer`** — both are soft fills, but `highlight` is a warm amber for the
+  *text highlight mark* specifically, chosen to contrast with the teal selection drawn on top of it;
+  `primaryContainer` stays in the teal family for accent chips/embeds. Don't swap them, or a range
+  selection over highlighted text becomes hard to see.
+
+### Text highlight
+
+The **highlight mark** (`state.applyHighlight(...)`) paints its background from the `highlight` role by
+default, so it adapts to light/dark automatically. The color is applied translucently so a range
+selection stays visible over highlighted text. You can pin a fixed highlight color per editor via the
+configuration's `highlightColor { … }` (see the main README's *Configuration*), which overrides the
+theme; leave it unset to track `highlight`.
 
 ## Typography & shapes
 

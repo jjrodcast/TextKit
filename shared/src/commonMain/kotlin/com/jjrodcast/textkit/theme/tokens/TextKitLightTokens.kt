@@ -10,6 +10,8 @@ internal object TextKitLightTokens  {
     val ON_PRIMARY_CONTAINER = Color(0xFF00201A)
     val SECONDARY = Color(0xFF4A635D)
     val ON_SECONDARY = Color(0xFFFFFFFF)
+    val HIGHLIGHT = Color(0xFFFFE9A8)
+    val ON_HIGHLIGHT = Color(0xFF3D2E00)
     val BACKGROUND = Color(0xFFF5FBF7)
     val ON_BACKGROUND = Color(0xFF171D1B)
     val SURFACE = Color(0xFFF5FBF7)

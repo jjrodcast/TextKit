@@ -4,7 +4,8 @@ import androidx.compose.ui.graphics.Color
 
 class TextKitBuilder {
 
-    private var highlightColor: Color = Color.Yellow
+    // null → the highlight tracks the active TextKitTheme's highlight role; set it to pin a color.
+    private var highlightColor: Color? = null
 
     // Full-alpha (0xFF…) Long literals. Without the alpha byte these are Int literals and hit the
     // Color(Int) constructor with alpha 0x00 → fully transparent, so links/text render invisibly.

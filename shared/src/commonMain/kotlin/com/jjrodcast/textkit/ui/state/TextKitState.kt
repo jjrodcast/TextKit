@@ -238,6 +238,15 @@ class TextKitState(
      */
     private var lastRangeSelection: TextRange = TextRange.Zero
 
+    /**
+     * Effective highlight-mark background. When the configuration pins
+     * [TextKitConfiguration.highlightColor] that color is used; otherwise it tracks the active theme's
+     * highlight role, pushed in from the composable via [setThemeHighlightColor] so highlights adapt
+     * to light/dark. [Color.Unspecified] until the first push when no override is set (no highlight
+     * drawn), which the composable resolves on its first frame.
+     */
+    private var highlightColor: Color = configuration.highlightColor ?: Color.Unspecified
+
     private var annotatedString by mutableStateOf(AnnotatedString(text = ""))
 
     private val viewerAnnotatedStringState = derivedStateOf {
@@ -271,6 +280,18 @@ class TextKitState(
         val offset = layout.getOffsetForPosition(position).coerceIn(0, textFieldValue.text.length)
         val (href, _) = manager.getLink(offset, offset)
         return href != null
+    }
+
+    /**
+     * Points the highlight-mark background at the active theme's `highlight` role (passed from
+     * [com.jjrodcast.textkit.ui.TextKitEditor] / [com.jjrodcast.textkit.ui.TextKitViewer]). No-op when
+     * the configuration pins its own [TextKitConfiguration.highlightColor]. Rebuilds the rendered text
+     * so a light/dark switch repaints existing highlights right away.
+     */
+    internal fun setThemeHighlightColor(color: Color) {
+        if (configuration.highlightColor != null || color == highlightColor) return
+        highlightColor = color
+        updateAnnotatedString(textFieldValue.selection)
     }
 
     internal fun setup() {
@@ -1111,12 +1132,12 @@ class TextKitState(
                     paragraph.children.forEach { child ->
                         if (child.text.endsWith(lineBreak)) {
                             val text = child.text.dropLast(1)
-                            withStyle(child.createStyle(manager.configuration)) {
+                            withStyle(child.createStyle(manager.configuration, highlightColor)) {
                                 append(text)
                             }
                             append(lineBreak)
                         } else {
-                            withStyle(child.createStyle(manager.configuration)) {
+                            withStyle(child.createStyle(manager.configuration, highlightColor)) {
                                 append(child.text)
                             }
                         }
@@ -1161,7 +1182,7 @@ class TextKitState(
                                     link = LinkAnnotation.Url(
                                         url = child.marks.filterIsInstance<LinkMark>()
                                             .first().attrs.href,
-                                        styles = TextLinkStyles(child.createStyle(manager.configuration)),
+                                        styles = TextLinkStyles(child.createStyle(manager.configuration, highlightColor)),
                                         linkInteractionListener = {
                                             val url = (it as LinkAnnotation.Url).url
                                             onUrlClicked?.invoke(
@@ -1177,7 +1198,7 @@ class TextKitState(
                             } else {
                                 append(text)
                                 addStyle(
-                                    style = child.createStyle(manager.configuration),
+                                    style = child.createStyle(manager.configuration, highlightColor),
                                     start = child.start,
                                     end = child.end
                                 )

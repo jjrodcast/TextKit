@@ -10,6 +10,8 @@ internal object TextKitDarkTokens {
      val ON_PRIMARY_CONTAINER = Color(0xFFA7F2DE)
      val SECONDARY = Color(0xFFB1CCC4)
      val ON_SECONDARY = Color(0xFF1C352F)
+     val HIGHLIGHT = Color(0xFF5C4600)
+     val ON_HIGHLIGHT = Color(0xFFFFE082)
      val BACKGROUND = Color(0xFF0E1513)
      val ON_BACKGROUND = Color(0xFFDEE4E1)
      val SURFACE = Color(0xFF1B211F)
