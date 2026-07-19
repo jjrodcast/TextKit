@@ -4,18 +4,19 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+
+/** Max number of undo snapshots kept per editing session. */
+private const val MaxHistory = 100
 
 /**
  * Holds the editable table. `grid[r][c]` stores the id of the cell occupying that logical slot; a
@@ -25,13 +26,31 @@ import kotlinx.serialization.json.putJsonObject
  *
  * Selection is line-based: [selectedRows] / [selectedCols] hold whole-line indices (chosen via the
  * gutter handles). The acted-upon rectangle is their bounding box ([blockRect]).
+ *
+ * **Undo/redo & sync.** This state is the single source of truth. Every mutation:
+ * 1. pushes a snapshot onto [undoStack] (consecutive keystrokes in one cell coalesce into a single
+ *    snapshot, exactly like the text editor groups typing), and
+ * 2. emits the new JSON via [onChange] so the host document stays in sync automatically — no manual
+ *    "sync" step.
+ *
+ * Because the table drives the JSON (and never rebuilds itself from its own echo — see [loadFrom] /
+ * [lastSyncedRaw]), editing never loses focus, cursor, selection or scroll. External changes
+ * (e.g. a document-level undo) come back through [loadFrom], which reloads in place.
  */
 @Stable
 internal class TextKitEditableTableState(
     private val grid: MutableList<MutableList<Long>>,
-    val cells: MutableMap<Long, CellContent>,
+    initialCells: Map<Long, CellContent>,
     startId: Long,
 ) {
+    /**
+     * Cell content by id. Backed by a **snapshot state map** so restoring a snapshot (undo/redo) or a
+     * reload recomposes exactly the cells whose content changed — even when the grid layout and the
+     * cell composable's parameters are otherwise identical (a plain map read wouldn't invalidate it).
+     */
+    val cells: SnapshotStateMap<Long, CellContent> =
+        mutableStateMapOf<Long, CellContent>().also { it.putAll(initialCells) }
+
     private var nextId = startId
 
     /** Bumped on structural changes (rows/cols/spans) to invalidate the grid layout. */
@@ -40,6 +59,33 @@ internal class TextKitEditableTableState(
 
     val selectedRows = mutableStateListOf<Int>()
     val selectedCols = mutableStateListOf<Int>()
+
+    // --- history + sync ---------------------------------------------------------------------
+
+    private val undoStack = ArrayDeque<TableSnapshot>()
+    private val redoStack = ArrayDeque<TableSnapshot>()
+
+    /** Coalescing key of the run in progress (e.g. `"text:5"`); `null` = no run, next edit is atomic. */
+    private var coalesceKey: Any? = null
+
+    /** Whether an [undo] / [redo] is available. Observe them to enable/disable the rail buttons. */
+    var canUndo by mutableStateOf(false)
+        private set
+    var canRedo by mutableStateOf(false)
+        private set
+
+    /** Called with the new ProseMirror JSON after every committed change (auto-sync sink). */
+    private var onChange: ((String) -> Unit)? = null
+
+    /**
+     * The exact JSON string of the last state we emitted. Used to recognize our own echo: an incoming
+     * `rawJson` equal to this (or canonically equal to it) is *our* change and is ignored; anything
+     * else is a genuine external change and triggers [loadFrom].
+     */
+    var lastSyncedRaw: String = ""
+        private set
+
+    fun setOnChange(callback: (String) -> Unit) { onChange = callback }
 
     private fun newId(): Long = nextId++
     private fun bump() { version++ }
@@ -104,6 +150,7 @@ internal class TextKitEditableTableState(
     // --- structural mutations ---------------------------------------------------------------
 
     fun addRow(at: Int) {
+        pushUndo(null)
         val n = cols()
         val newRow = ArrayList<Long>(n)
         for (c in 0 until n) {
@@ -122,9 +169,11 @@ internal class TextKitEditableTableState(
         grid.add(at, newRow)
         clearSelection()
         bump()
+        emit()
     }
 
     fun addColumn(at: Int) {
+        pushUndo(null)
         for (row in grid) {
             val left = if (at > 0) row[at - 1] else -1L
             val right = if (at < row.size) row[at] else -1L
@@ -138,25 +187,30 @@ internal class TextKitEditableTableState(
         }
         clearSelection()
         bump()
+        emit()
     }
 
     private fun deleteRows(indices: List<Int>) {
         val distinct = indices.distinct()
         if (rows() - distinct.size < 1) return // always keep at least one row
+        pushUndo(null)
         distinct.sortedDescending().forEach { if (it in grid.indices) grid.removeAt(it) }
         purge()
         clearSelection()
         bump()
+        emit()
     }
 
     private fun deleteColumns(indices: List<Int>) {
         val distinct = indices.distinct()
         if (cols() - distinct.size < 1) return // always keep at least one column
+        pushUndo(null)
         val desc = distinct.sortedDescending()
         for (row in grid) for (c in desc) if (c < row.size) row.removeAt(c)
         purge()
         clearSelection()
         bump()
+        emit()
     }
 
     fun deleteSelection() {
@@ -164,6 +218,20 @@ internal class TextKitEditableTableState(
             selectedRows.isNotEmpty() -> deleteRows(selectedRows.toList())
             selectedCols.isNotEmpty() -> deleteColumns(selectedCols.toList())
         }
+    }
+
+    // --- text editing -----------------------------------------------------------------------
+
+    /**
+     * Sets [id]'s text. Consecutive edits to the *same* cell coalesce into one undo step (so undo
+     * reverts the whole typing burst, like the text editor), and each change auto-syncs the JSON.
+     */
+    fun editCell(id: Long, text: String) {
+        val cell = cells[id] ?: return
+        if (cell.text == text) return
+        pushUndo("text:$id")
+        cell.text = text
+        emit()
     }
 
     // --- merge / split ----------------------------------------------------------------------
@@ -180,12 +248,14 @@ internal class TextKitEditableTableState(
 
     fun mergeSelection() {
         if (!canMerge()) return
+        pushUndo(null)
         val rect = blockRect() ?: return
         val target = grid[rect[0]][rect[1]] // keep the top-left cell's content
         for (r in rect[0]..rect[2]) for (c in rect[1]..rect[3]) grid[r][c] = target
         purge()
         clearSelection()
         bump()
+        emit()
     }
 
     fun canSplit(): Boolean {
@@ -199,6 +269,7 @@ internal class TextKitEditableTableState(
 
     fun splitSelection() {
         if (!canSplit()) return
+        pushUndo(null)
         val rect = blockRect() ?: return
         val id = grid[rect[0]][rect[1]]
         val header = cells[id]?.isHeader == true
@@ -211,6 +282,7 @@ internal class TextKitEditableTableState(
         }
         clearSelection()
         bump()
+        emit()
     }
 
     fun toggleHeaderBlock() {
@@ -218,13 +290,102 @@ internal class TextKitEditableTableState(
         val ids = HashSet<Long>()
         for (r in rect[0]..rect[2]) for (c in rect[1]..rect[3]) ids.add(grid[r][c])
         if (ids.isEmpty()) return
+        pushUndo(null)
         val allHeader = ids.all { cells[it]?.isHeader == true }
         ids.forEach { cells[it]?.isHeader = !allHeader }
+        bump()
+        emit()
     }
 
     private fun purge() {
         val live = grid.flatten().toHashSet()
         cells.keys.retainAll(live)
+    }
+
+    // --- undo / redo ------------------------------------------------------------------------
+
+    private fun snapshot(): TableSnapshot = TableSnapshot(
+        grid = grid.map { it.toList() },
+        cells = cells.mapValues { (_, v) -> v.text to v.isHeader },
+        nextId = nextId,
+    )
+
+    private fun restoreSnapshot(s: TableSnapshot) {
+        grid.clear()
+        s.grid.forEach { grid.add(it.toMutableList()) }
+        cells.clear()
+        s.cells.forEach { (id, v) -> cells[id] = CellContent(v.first, v.second) }
+        nextId = s.nextId
+        clearSelection()
+        bump()
+    }
+
+    /**
+     * Records the current state as an undo point before a mutation. Same non-null [coalesce] key as
+     * the previous edit reuses that point (coalescing), so a run of edits collapses to one step.
+     */
+    private fun pushUndo(coalesce: Any?) {
+        val coalesced = coalesce != null && coalesce == coalesceKey && undoStack.isNotEmpty()
+        if (!coalesced) {
+            undoStack.addLast(snapshot())
+            if (undoStack.size > MaxHistory) undoStack.removeFirst()
+            redoStack.clear()
+        }
+        coalesceKey = coalesce
+        syncHistoryFlags()
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        redoStack.addLast(snapshot())
+        restoreSnapshot(undoStack.removeLast())
+        coalesceKey = null // end any coalescing run
+        syncHistoryFlags()
+        emit()
+    }
+
+    fun redo() {
+        if (redoStack.isEmpty()) return
+        undoStack.addLast(snapshot())
+        restoreSnapshot(redoStack.removeLast())
+        coalesceKey = null
+        syncHistoryFlags()
+        emit()
+    }
+
+    private fun syncHistoryFlags() {
+        canUndo = undoStack.isNotEmpty()
+        canRedo = redoStack.isNotEmpty()
+    }
+
+    // --- external sync ----------------------------------------------------------------------
+
+    /** Emits the current table JSON to the host, remembering it so its echo is ignored. */
+    private fun emit() {
+        val json = toProseMirrorJson()
+        lastSyncedRaw = json
+        onChange?.invoke(json)
+    }
+
+    /**
+     * Replaces the whole table from an external [rawJson] (e.g. after a document-level undo), in
+     * place so the composable identity is kept. Clears history and selection; does not emit (the
+     * change originated outside).
+     */
+    fun loadFrom(rawJson: String) {
+        val fresh = from(rawJson)
+        grid.clear()
+        fresh.grid.forEach { grid.add(it.toMutableList()) }
+        cells.clear()
+        fresh.cells.forEach { (id, v) -> cells[id] = CellContent(v.text, v.isHeader) }
+        nextId = fresh.nextId
+        undoStack.clear()
+        redoStack.clear()
+        coalesceKey = null
+        clearSelection()
+        lastSyncedRaw = toProseMirrorJson()
+        syncHistoryFlags()
+        bump()
     }
 
     // --- serialization ----------------------------------------------------------------------
@@ -267,91 +428,17 @@ internal class TextKitEditableTableState(
     }
 
     companion object {
-        private val json = Json { ignoreUnknownKeys = true }
 
-        fun from(rawJson: String): TextKitEditableTableState =
-            runCatching { parse(rawJson) }.getOrNull() ?: default()
-
-        private fun default(): TextKitEditableTableState {
-            val grid = MutableList(3) { r -> MutableList(3) { c -> (r * 3 + c).toLong() } }
-            val cells = HashMap<Long, CellContent>()
-            for (r in 0..2) for (c in 0..2) {
-                val id = (r * 3 + c).toLong()
-                cells[id] = CellContent(if (r == 0) "Encabezado ${c + 1}" else "", r == 0)
-            }
-            return TextKitEditableTableState(grid, cells, 9L)
+        /** Builds a fresh state by decoding [rawJson] (see [TableJsonCodec]). */
+        fun from(rawJson: String): TextKitEditableTableState {
+            val decoded = TableJsonCodec.decode(rawJson)
+            val state = TextKitEditableTableState(decoded.grid, decoded.cells, decoded.nextId)
+            state.lastSyncedRaw = state.toProseMirrorJson()
+            return state
         }
 
-        private fun parse(rawJson: String): TextKitEditableTableState {
-            val obj = json.parseToJsonElement(rawJson).jsonObject
-            require(obj["type"]?.jsonPrimitive?.content == "table")
-            val rowsJson = obj["content"]?.jsonArray ?: JsonArray(emptyList())
-
-            val grid: MutableList<MutableList<Long>> = ArrayList()
-            val cells = HashMap<Long, CellContent>()
-            var nextId = 0L
-
-            fun ensure(r: Int, c: Int) {
-                while (grid.size <= r) grid.add(ArrayList())
-                val row = grid[r]
-                while (row.size <= c) row.add(-1L)
-            }
-
-            fun get(r: Int, c: Int): Long {
-                if (r >= grid.size) return -1L
-                val row = grid[r]
-                if (c >= row.size) return -1L
-                return row[c]
-            }
-
-            fun set(r: Int, c: Int, id: Long) { ensure(r, c); grid[r][c] = id }
-
-            rowsJson.forEachIndexed { r, rowEl ->
-                ensure(r, 0)
-                val cs = rowEl.jsonObject["content"]?.jsonArray ?: JsonArray(emptyList())
-                var c = 0
-                cs.forEach { cellEl ->
-                    val cell = cellEl.jsonObject
-                    while (get(r, c) != -1L) c++
-                    val attrs = cell["attrs"]?.jsonObject
-                    val colspan = attrs?.get("colspan")?.jsonPrimitive?.content?.toIntOrNull()?.coerceAtLeast(1) ?: 1
-                    val rowspan = attrs?.get("rowspan")?.jsonPrimitive?.content?.toIntOrNull()?.coerceAtLeast(1) ?: 1
-                    val isHeader = cell["type"]?.jsonPrimitive?.content == "tableHeader"
-                    val id = nextId++
-                    cells[id] = CellContent(cellText(cell["content"]?.jsonArray), isHeader)
-                    for (dr in 0 until rowspan) for (dc in 0 until colspan) set(r + dr, c + dc, id)
-                    c += colspan
-                }
-            }
-
-            require(grid.isNotEmpty())
-            // Rectangularize: pad every row to the widest and fill any holes with fresh single cells.
-            val cols = grid.maxOf { it.size }.coerceAtLeast(1)
-            for (r in grid.indices) {
-                ensure(r, cols - 1)
-                val row = grid[r]
-                for (c in 0 until cols) {
-                    if (row[c] == -1L) {
-                        val id = nextId++
-                        cells[id] = CellContent("", false)
-                        row[c] = id
-                    }
-                }
-            }
-            return TextKitEditableTableState(grid, cells, nextId)
-        }
-
-        /** Concatenates all `text` leaves inside a cell's paragraph content. */
-        private fun cellText(paragraphs: JsonArray?): String {
-            if (paragraphs == null) return ""
-            val builder = StringBuilder()
-            paragraphs.forEach { paragraph ->
-                paragraph.jsonObject["content"]?.jsonArray?.forEach { inline ->
-                    inline.jsonObject["text"]?.jsonPrimitive?.content?.let { builder.append(it) }
-                }
-            }
-            return builder.toString()
-        }
+        /** Canonical JSON of [rawJson] as this model would serialize it (for echo detection). */
+        fun canonical(rawJson: String): String = from(rawJson).toProseMirrorJson()
 
         private fun paragraphJson(text: String): JsonObject = buildJsonObject {
             put("type", "paragraph")

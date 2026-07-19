@@ -333,6 +333,9 @@ class TextKitState(
         selection = restoredSelection
         updateAnnotatedString(restoredSelection)
         readSelectionContext()
+        // Refresh the open embed popup (if any) so a document-level undo/redo of a table edit is
+        // reflected in the live editor: the re-derived JSON flows back into the table, which reloads.
+        activeEmbed = activeEmbed?.let { manager.embedAt(it.range.min) }
         syncHistoryAvailability()
     }
 
@@ -845,6 +848,8 @@ class TextKitState(
         val info = manager.embedAt(offset) ?: return false
         activeEmbed = info
         embedPopupOffset = Offset.Zero
+        // Start a fresh coalescing run so this embed's edits don't merge with a previous session.
+        manager.breakHistoryCoalescing()
         return true
     }
 
@@ -852,6 +857,8 @@ class TextKitState(
     fun dismissEmbedPopup() {
         activeEmbed = null
         embedPopupOffset = Offset.Zero
+        // End the embed's coalescing run so the next unrelated edit is a separate undo step.
+        manager.breakHistoryCoalescing()
     }
 
     /** Restores the open embed (by document offset) and its drag offset after a state restore. */
@@ -886,16 +893,24 @@ class TextKitState(
         }
     }
 
-    /** Replaces the JSON of the currently open embed (one undo step). */
+    /**
+     * Replaces the JSON of the currently open embed. Consecutive updates to the same embed **coalesce
+     * into a single undo step** (via [recordBefore]'s coalescing), so a table's live auto-sync — which
+     * fires on every keystroke/action — collapses to one global editor step instead of flooding it.
+     * The run ends when the popup closes/opens ([dismissEmbedPopup]/[openEmbedAt]) or any other edit
+     * happens.
+     */
     fun updateActiveEmbed(rawJson: String): Boolean {
         val info = activeEmbed ?: return false
-        val changed = recordBefore {
+        return recordBefore(coalesceKey = "embed:${info.range.min}", breakAfter = false) {
             manager.updateEmbedAt(info.range, rawJson)
             updateAnnotatedString(selection)
             true
         }
-        if (changed) activeEmbed = manager.embedAt(info.range.min)
-        return changed
+        // Intentionally does NOT reassign `activeEmbed`: the editor UI (e.g. the editable table) is the
+        // source of truth for its own live edits, and reassigning would change `activeEmbed.rawJson`
+        // on every keystroke, recomposing the whole popup and disrupting the focused text field.
+        // External changes (document-level undo/redo) refresh `activeEmbed` via applyRestoredHistory.
     }
 
     /** Removes the currently open embed and closes its popup (one undo step). */

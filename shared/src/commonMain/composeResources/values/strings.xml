@@ -21,4 +21,13 @@
     <string name="edit_label">Edit</string>
     <string name="remove_label">Remove</string>
 
+    <string name="table_merge_cells_text">Merge cells</string>
+    <string name="table_split_cell_text">Split cell</string>
+    <string name="table_toggle_header_text">Toggle header</string>
+    <string name="table_delete_selection_text">Delete selection</string>
+    <string name="table_clear_selection_text">Clear selection</string>
+    <string name="table_add_text">Add</string>
+    <string name="table_selection_hint_text">Tap the edges to select rows or columns; use the icons to merge, split, or delete.</string>
+    <string name="table_synced_json_text">Synced JSON</string>
+
 </resources>

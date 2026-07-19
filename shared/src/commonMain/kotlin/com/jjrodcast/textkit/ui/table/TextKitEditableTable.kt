@@ -7,33 +7,34 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.CallMerge
+import androidx.compose.material.icons.automirrored.rounded.CallSplit
+import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CallMerge
-import androidx.compose.material.icons.rounded.CallSplit
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Title
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -44,13 +45,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jjrodcast.textkit.theme.TextKitTheme
+import org.jetbrains.compose.resources.stringResource
+import textkit.shared.generated.resources.Res
+import textkit.shared.generated.resources.redo_text
+import textkit.shared.generated.resources.table_add_text
+import textkit.shared.generated.resources.table_clear_selection_text
+import textkit.shared.generated.resources.table_delete_selection_text
+import textkit.shared.generated.resources.table_merge_cells_text
+import textkit.shared.generated.resources.table_selection_hint_text
+import textkit.shared.generated.resources.table_split_cell_text
+import textkit.shared.generated.resources.table_synced_json_text
+import textkit.shared.generated.resources.table_toggle_header_text
+import textkit.shared.generated.resources.undo_text
 
 /**
  * An **editable**, Notion-style rich table for a `table` embed — designed to live inside a popup and
@@ -64,14 +79,16 @@ import com.jjrodcast.textkit.theme.TextKitTheme
  * - Cells are plain editable text, so tapping a cell never fights with selecting it.
  *
  * Header cells use a more prominent color (`primaryContainer`) so they stand out from body rows.
- * Nothing leaves the component until the user taps **Sync** (the primary rail icon), which hands
- * [onSync] the table re-serialized to the same ProseMirror JSON shape as the embed's `rawJson`.
+ * Every change **auto-syncs**: [onSync] receives the updated ProseMirror JSON on each edit, and the
+ * rail offers granular **undo/redo** of the table's own changes. The table is the source of truth and
+ * never rebuilds from its own echo, so editing never loses focus/cursor/selection; genuine external
+ * changes to [rawJson] (e.g. a document-level undo) are reloaded in place.
  *
  * Everything is themed through [TextKitTheme] (colors + font family), so it adapts to light/dark.
  *
- * @param rawJson The ProseMirror `table` JSON from the embed model (`EmbedInfo.rawJson`). A fresh
- *   editable state is rebuilt whenever this changes. Malformed input falls back to a starter 3×3.
- * @param onSync Called with the updated ProseMirror `table` JSON when the user syncs their changes.
+ * @param rawJson The ProseMirror `table` JSON from the embed model (`EmbedInfo.rawJson`). Its content
+ *   seeds the editor and an external change to it is reloaded. Malformed input falls back to 3×3.
+ * @param onSync Called with the updated ProseMirror `table` JSON after every edit (auto-sync).
  * @param modifier Layout modifier for the root.
  */
 @Composable
@@ -80,7 +97,23 @@ fun TextKitEditableTable(
     onSync: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state = remember(rawJson) { TextKitEditableTableState.from(rawJson) }
+    // The state is the source of truth; it is NOT keyed on rawJson so our own auto-sync echo doesn't
+    // rebuild it (which would drop focus/cursor/selection).
+    val state = remember { TextKitEditableTableState.from(rawJson) }
+
+    // Keep the auto-sync sink current.
+    SideEffect { state.setOnChange(onSync) }
+
+    // Reload only on a *genuine* external change. Fast path: exact match with what we last emitted is
+    // our own echo → ignore. Otherwise compare canonically so cosmetic reformatting from the host
+    // doesn't force a rebuild that would drop focus/selection.
+    LaunchedEffect(rawJson) {
+        if (rawJson != state.lastSyncedRaw &&
+            TextKitEditableTableState.canonical(rawJson) != TextKitEditableTableState.canonical(state.lastSyncedRaw)
+        ) {
+            state.loadFrom(rawJson)
+        }
+    }
 
     Column(
         modifier = modifier,
@@ -98,71 +131,67 @@ fun TextKitEditableTable(
             }
             TextKitActionRail(
                 state = state,
-                onSync = onSync,
                 modifier = Modifier.padding(start = 6.dp),
             )
         }
 
         Text(
-            text = "Toca los bordes para seleccionar filas o columnas; usa los íconos para fusionar, dividir o eliminar.",
+            text = stringResource(Res.string.table_selection_hint_text),
             style = captionStyle(),
         )
     }
 }
 
+/** One action button in the rail. */
+private class RailAction(
+    val icon: ImageVector,
+    val description: String,
+    val enabled: Boolean,
+    val onClick: () -> Unit,
+)
+
 @Composable
 private fun TextKitActionRail(
     state: TextKitEditableTableState,
-    onSync: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.width(TextKitTableConstants.RailWidth),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        // Scroll the contextual actions so they all stay reachable when the popup is short (landscape),
-        // while the primary "Sincronizar" action stays pinned at the bottom. The heightIn cap keeps the
-        // inner scroll bounded even if the rail is placed in an unbounded-height parent.
+    val actions = listOf(
+        RailAction(Icons.AutoMirrored.Rounded.CallMerge, stringResource(Res.string.table_merge_cells_text), state.canMerge()) { state.mergeSelection() },
+        RailAction(Icons.AutoMirrored.Rounded.CallSplit, stringResource(Res.string.table_split_cell_text), state.canSplit()) { state.splitSelection() },
+        RailAction(Icons.Rounded.Title, stringResource(Res.string.table_toggle_header_text), state.hasSelection()) { state.toggleHeaderBlock() },
+        RailAction(Icons.Rounded.DeleteOutline, stringResource(Res.string.table_delete_selection_text), state.hasSelection()) { state.deleteSelection() },
+        RailAction(Icons.AutoMirrored.Rounded.Undo, stringResource(Res.string.undo_text), state.canUndo) { state.undo() },
+        RailAction(Icons.AutoMirrored.Rounded.Redo, stringResource(Res.string.redo_text), state.canRedo) { state.redo() },
+    )
+
+    val spacing = 6.dp
+    BoxWithConstraints(modifier) {
+        // Height a single column of every action would need; when the popup is too short for it
+        // (typically mobile landscape) fall back to two columns so all actions stay visible without
+        // relying on scrolling. A scroll + height cap remain as a safety net for extreme sizes.
+        val singleColumnHeight =
+            TextKitTableConstants.RailButtonSize * actions.size + spacing * (actions.size - 1)
+        val columns = if (maxHeight >= singleColumnHeight) 1 else 2
+
         Column(
             modifier = Modifier
-                .weight(1f, fill = false)
                 .heightIn(max = TextKitTableConstants.MaxTableHeight)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(spacing),
         ) {
-            TextKitRailButton(
-                Icons.Rounded.CallMerge,
-                "Fusionar celdas",
-                enabled = state.canMerge()
-            ) {
-                state.mergeSelection()
+            actions.chunked(columns).forEach { rowActions ->
+                Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                    rowActions.forEach { action ->
+                        TextKitRailButton(
+                            icon = action.icon,
+                            contentDescription = action.description,
+                            enabled = action.enabled,
+                            onClick = action.onClick,
+                        )
+                    }
+                }
             }
-            TextKitRailButton(
-                Icons.Rounded.CallSplit,
-                "Dividir celda",
-                enabled = state.canSplit()
-            ) {
-                state.splitSelection()
-            }
-            TextKitRailButton(
-                Icons.Rounded.Title,
-                "Alternar encabezado",
-                enabled = state.hasSelection()
-            ) {
-                state.toggleHeaderBlock()
-            }
-            TextKitRailButton(
-                Icons.Rounded.DeleteOutline,
-                "Eliminar selección",
-                enabled = state.hasSelection()
-            ) {
-                state.deleteSelection()
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        TextKitRailButton(Icons.Rounded.Sync, "Sincronizar cambios", primary = true) {
-            onSync(state.toProseMirrorJson())
         }
     }
 }
@@ -348,10 +377,22 @@ private fun TextKitTableCellView(
         BorderStroke(1.dp, TextKitTheme.colors.outlineVariant)
     }
 
+    // Keep the field's own TextFieldValue (cursor/selection) locally so live typing is never disturbed
+    // by recompositions. Reflect *external* content changes (undo/redo/reload) only when they differ.
+    var value by remember(id) { mutableStateOf(TextFieldValue(content.text)) }
+    LaunchedEffect(content.text) {
+        if (content.text != value.text) {
+            value = TextFieldValue(content.text, TextRange(content.text.length))
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(background).border(border)) {
         BasicTextField(
-            value = content.text,
-            onValueChange = { content.text = it },
+            value = value,
+            onValueChange = {
+                value = it
+                state.editCell(id, it.text)
+            },
             textStyle = cellTextStyle(isHeader),
             cursorBrush = SolidColor(TextKitTheme.colors.primary),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
@@ -372,7 +413,7 @@ private fun TextKitCornerHandle(state: TextKitEditableTableState) {
         if (state.hasSelection()) {
             Icon(
                 Icons.Rounded.Close,
-                contentDescription = "Quitar selección",
+                contentDescription = stringResource(Res.string.table_clear_selection_text),
                 tint = TextKitTheme.colors.onSurfaceVariant,
                 modifier = Modifier.size(14.dp),
             )
@@ -433,7 +474,7 @@ private fun TextKitAddHandle(onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Rounded.Add,
-            contentDescription = "Agregar",
+            contentDescription = stringResource(Res.string.table_add_text),
             tint = TextKitTheme.colors.primary,
             modifier = Modifier.size(16.dp),
         )
@@ -483,7 +524,7 @@ private fun TextKitEditableTablePreview() {
             }
             if (synced.isNotEmpty()) {
                 Text(
-                    text = "JSON sincronizado",
+                    text = stringResource(Res.string.table_synced_json_text),
                     style = TextStyle(
                         fontFamily = TextKitTheme.typography.fontFamily,
                         fontSize = 13.sp,

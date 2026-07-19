@@ -26,9 +26,6 @@ internal object TextKitTableConstants {
     /** Max height of the scrollable table area so it never overflows the host popup. */
     val MaxTableHeight: Dp = 360.dp
 
-    /** Width of the side action rail. */
-    val RailWidth: Dp = 48.dp
-
     /** Diameter of a rail action button. */
     val RailButtonSize: Dp = 42.dp
 
@@ -38,17 +35,17 @@ internal object TextKitTableConstants {
   "type": "table",
   "content": [
     { "type": "tableRow", "content": [
-      { "type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Producto"}]}] },
-      { "type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Región"}]}] },
-      { "type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Ventas"}]}] }
+      { "type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Product"}]}] },
+      { "type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Region"}]}] },
+      { "type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Sales"}]}] }
     ]},
     { "type": "tableRow", "content": [
       { "type": "tableCell", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Laptop"}]}] },
-      { "type": "tableCell", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Norte"}]}] },
+      { "type": "tableCell", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"North"}]}] },
       { "type": "tableCell", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"1200"}]}] }
     ]},
     { "type": "tableRow", "content": [
-      { "type": "tableCell", "attrs": {"colspan": 2, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Total parcial"}]}] },
+      { "type": "tableCell", "attrs": {"colspan": 2, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"Subtotal"}]}] },
       { "type": "tableCell", "attrs": {"colspan": 1, "rowspan": 1, "colwidth": null}, "content": [{"type":"paragraph","content":[{"type":"text","text":"1200"}]}] }
     ]}
   ]
