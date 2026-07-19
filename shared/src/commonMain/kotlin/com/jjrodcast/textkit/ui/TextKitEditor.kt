@@ -11,6 +11,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +61,7 @@ fun TextKitEditor(
 
     // Highlight-mark background tracks the theme (unless the config pinned its own color).
     val highlightColor = TextKitTheme.colors.highlight
-    LaunchedEffect(highlightColor) { state.setThemeHighlightColor(highlightColor) }
+    SideEffect { state.setThemeHighlightColor(highlightColor) }
 
     BasicTextField(
         modifier = modifier
