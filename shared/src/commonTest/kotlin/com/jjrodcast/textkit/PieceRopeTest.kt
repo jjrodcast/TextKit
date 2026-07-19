@@ -2,6 +2,8 @@ package com.jjrodcast.textkit
 
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.core.piecetable.models.Source
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toTextEditorListItem
 import com.jjrodcast.textkit.editor.core.piecetable.rope.PieceRope
 import com.jjrodcast.textkit.editor.core.piecetable.rope.RopeNode
 import kotlin.math.ceil
@@ -310,5 +312,141 @@ class PieceRopeTest {
         }
 
         assertTrue(rope.snapshot()!!.height <= avlHeightCeiling(rope.size))
+    }
+
+    // ── Paragraph & offset queries vs. a brute-force oracle ───────────────────
+
+    /** A line-break piece — the piece that terminates a paragraph. Length 1, like a '\n'. */
+    private fun lineBreak(id: Int, decorator: TextDecoratorModel? = null): RichPiece = RichPiece(
+        source = Source.ADDED,
+        offset = id,
+        length = 1,
+        decorator = decorator,
+        isLineBreak = true,
+        endsWithLineBreak = true,
+    )
+
+    // Linear-scan reference implementations of the rope's O(log P) queries. Deliberately naive so a
+    // divergence points at the rope, not the oracle.
+
+    private fun oracleFindByDocumentOffset(pieces: List<RichPiece>, docOffset: Int): Pair<Int, Int> {
+        var acc = 0
+        for ((index, p) in pieces.withIndex()) {
+            val end = acc + p.length
+            if (end >= docOffset) return index to acc
+            acc = end
+        }
+        val last = pieces.lastIndex
+        return last to (acc - pieces[last].length)
+    }
+
+    private fun oracleParagraphStart(pieces: List<RichPiece>, docOffset: Int): Int {
+        val target = oracleFindByDocumentOffset(pieces, docOffset).first
+        for (i in target - 1 downTo 0) if (pieces[i].endsWithLineBreak) return i + 1
+        return 0
+    }
+
+    private fun oracleParagraphEnd(pieces: List<RichPiece>, docOffset: Int): Int {
+        val target = oracleFindByDocumentOffset(pieces, docOffset).first
+        if (pieces[target].endsWithLineBreak) return target
+        for (i in target + 1 until pieces.size) if (pieces[i].endsWithLineBreak) return i
+        return pieces.size - 1
+    }
+
+    private fun oracleFirstLineBreakFrom(pieces: List<RichPiece>, fromIndex: Int): Int {
+        for (i in fromIndex until pieces.size) if (pieces[i].endsWithLineBreak) return i
+        return pieces.size - 1
+    }
+
+    private fun oracleLastLineBreakBefore(pieces: List<RichPiece>, beforeIndex: Int): Int {
+        if (beforeIndex <= 0) return -1
+        for (i in minOf(beforeIndex - 1, pieces.lastIndex) downTo 0) if (pieces[i].endsWithLineBreak) return i
+        return -1
+    }
+
+    private fun oracleParagraphType(pieces: List<RichPiece>, index: Int) =
+        pieces.take(index).fold(pieces.first().decorator.toTextEditorListItem()) { type, piece ->
+            if (piece.isLineBreak) piece.decorator.toTextEditorListItem() else type
+        }
+
+    /**
+     * Cross-checks every offset/index against the oracle for one curated [pieces] document,
+     * exhaustively over all offsets and indices. Fixed input, full enumeration — deterministic.
+     */
+    private fun assertQueriesMatchOracle(pieces: List<RichPiece>) {
+        val rope = PieceRope().apply { buildFrom(pieces) }
+        val total = pieces.sumOf { it.length }
+
+        for (docOffset in 0..total + 1) {
+            assertEquals(
+                oracleFindByDocumentOffset(pieces, docOffset), rope.findByDocumentOffset(docOffset),
+                "findByDocumentOffset($docOffset)",
+            )
+            assertEquals(
+                oracleParagraphStart(pieces, docOffset), rope.findParagraphStartAt(docOffset),
+                "findParagraphStartAt($docOffset)",
+            )
+            assertEquals(
+                oracleParagraphEnd(pieces, docOffset), rope.findParagraphEndAt(docOffset),
+                "findParagraphEndAt($docOffset)",
+            )
+        }
+
+        for (index in 0 until pieces.size) {
+            assertEquals(
+                oracleParagraphType(pieces, index), rope.getOffsetAndParagraphTypeAt(index).second,
+                "paragraphType at $index",
+            )
+        }
+
+        for (fromIndex in 0..pieces.size) {
+            assertEquals(
+                oracleFirstLineBreakFrom(pieces, fromIndex), rope.findFirstLineBreakEndFrom(fromIndex),
+                "findFirstLineBreakEndFrom($fromIndex)",
+            )
+        }
+
+        for (beforeIndex in 0..pieces.size) {
+            assertEquals(
+                oracleLastLineBreakBefore(pieces, beforeIndex), rope.findLastLineBreakEndBefore(beforeIndex),
+                "findLastLineBreakEndBefore($beforeIndex)",
+            )
+        }
+    }
+
+    @Test
+    fun queries_match_oracle_for_two_plain_paragraphs() {
+        // "Hello\n" + "World\n"
+        assertQueriesMatchOracle(
+            listOf(piece(id = 0, length = 5), lineBreak(1), piece(id = 2, length = 5), lineBreak(3)),
+        )
+    }
+
+    @Test
+    fun queries_match_oracle_for_a_decorated_list_document() {
+        // A numbered item and a bulleted item; the decorator rides the terminating line break.
+        assertQueriesMatchOracle(
+            listOf(
+                piece(id = 0, length = 4),
+                lineBreak(1, TextDecoratorModel.NumberDecoratorModel(count = 1)),
+                piece(id = 2, length = 4),
+                lineBreak(3, TextDecoratorModel.BulletDecoratorModel()),
+            ),
+        )
+    }
+
+    @Test
+    fun queries_match_oracle_when_the_last_paragraph_has_no_line_break() {
+        // "abc\n" + "de" — the trailing paragraph is unterminated, the common editor end state.
+        assertQueriesMatchOracle(
+            listOf(piece(id = 0, length = 3), lineBreak(1), piece(id = 2, length = 2)),
+        )
+    }
+
+    @Test
+    fun queries_match_oracle_for_a_single_paragraph_with_no_line_breaks() {
+        assertQueriesMatchOracle(
+            listOf(piece(id = 0, length = 4), piece(id = 1, length = 3), piece(id = 2, length = 5)),
+        )
     }
 }
