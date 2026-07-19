@@ -123,6 +123,10 @@ state.applyStrikeThrough(selected = true)
 state.applyHighlight(selected = true)
 ```
 
+The highlight background follows the theme's `highlight` role (a warm amber that adapts to light/dark)
+and is painted translucently so a range selection stays visible over highlighted text. Pin a fixed
+color with `highlightColor { … }` in the [Configuration](#configuration) to override the theme.
+
 ## Text style (color & size)
 
 `applyTextStyle` sets the font size (in the document's font-size units) and an optional hex color
@@ -515,7 +519,7 @@ import com.jjrodcast.textkit.editor.models.TextKitTrigger
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 
 val configuration = createTextKitConfiguration {
-    highlightColor { Color.Yellow }
+    highlightColor { Color.Yellow }                          // optional: pin the highlight background; omit to follow the theme's `highlight` role
     linkColor { Color(0xFF1B75D0) }
     textColor { Color(0xFF000000) }
     fontSize { 14 }                                          // default font size

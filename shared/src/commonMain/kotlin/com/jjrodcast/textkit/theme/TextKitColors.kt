@@ -21,6 +21,9 @@ import com.jjrodcast.textkit.theme.tokens.TextKitLightTokens
  * @property onPrimaryContainer Content drawn on top of [primaryContainer].
  * @property secondary Supporting accent for smaller cues (e.g. the expandable-item indicator).
  * @property onSecondary Content drawn on top of [secondary].
+ * @property highlight Background of text carrying the highlight mark. A warm amber, deliberately off
+ *   the teal [primary] family so it stays distinct from the text selection painted over it.
+ * @property onHighlight Content drawn on top of [highlight].
  * @property background The editor's base surface (the `BasicTextField` area).
  * @property onBackground Content drawn on top of [background].
  * @property surface Raised containers: the formatting-bar `Card`, popups, tooltips, menus.
@@ -40,6 +43,8 @@ class TextKitColors(
     val onPrimaryContainer: Color,
     val secondary: Color,
     val onSecondary: Color,
+    val highlight: Color,
+    val onHighlight: Color,
     val background: Color,
     val onBackground: Color,
     val surface: Color,
@@ -65,6 +70,8 @@ class TextKitColors(
             onPrimaryContainer: Color = TextKitLightTokens.ON_PRIMARY_CONTAINER,
             secondary: Color = TextKitLightTokens.SECONDARY,
             onSecondary: Color = TextKitLightTokens.ON_SECONDARY,
+            highlight: Color = TextKitLightTokens.HIGHLIGHT,
+            onHighlight: Color = TextKitLightTokens.ON_HIGHLIGHT,
             background: Color = TextKitLightTokens.BACKGROUND,
             onBackground: Color = TextKitLightTokens.ON_BACKGROUND,
             surface: Color = TextKitLightTokens.SURFACE,
@@ -84,6 +91,8 @@ class TextKitColors(
                 onPrimaryContainer = onPrimaryContainer,
                 secondary = secondary,
                 onSecondary = onSecondary,
+                highlight = highlight,
+                onHighlight = onHighlight,
                 background = background,
                 onBackground = onBackground,
                 surface = surface,
@@ -108,6 +117,8 @@ class TextKitColors(
             onPrimaryContainer: Color = TextKitDarkTokens.ON_PRIMARY_CONTAINER,
             secondary: Color = TextKitDarkTokens.SECONDARY,
             onSecondary: Color = TextKitDarkTokens.ON_SECONDARY,
+            highlight: Color = TextKitDarkTokens.HIGHLIGHT,
+            onHighlight: Color = TextKitDarkTokens.ON_HIGHLIGHT,
             background: Color = TextKitDarkTokens.BACKGROUND,
             onBackground: Color = TextKitDarkTokens.ON_BACKGROUND,
             surface: Color = TextKitDarkTokens.SURFACE,
@@ -127,6 +138,8 @@ class TextKitColors(
                 onPrimaryContainer = onPrimaryContainer,
                 secondary = secondary,
                 onSecondary = onSecondary,
+                highlight = highlight,
+                onHighlight = onHighlight,
                 background = background,
                 onBackground = onBackground,
                 surface = surface,

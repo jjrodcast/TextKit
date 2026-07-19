@@ -20,13 +20,16 @@ import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorItem
 import com.jjrodcast.textkit.editor.models.TextKitConfiguration
 
 
-internal fun TextEditorItem.createStyle(configuration: TextKitConfiguration): SpanStyle {
+internal fun TextEditorItem.createStyle(
+    configuration: TextKitConfiguration,
+    highlightColor: Color,
+): SpanStyle {
     val base = SpanStyle(
         color = createColorSpanStyle(configuration.linkColor),
         fontWeight = createBoldSpanStyle(),
         fontStyle = createItalicSpanStyle(),
         fontSize = createTextSizeStyle(),
-        background = createHighlightSpanStyle(configuration.highlightColor),
+        background = createHighlightSpanStyle(highlightColor),
         textDecoration = TextDecoration.combine(
             listOfNotNull(
                 createLinkSpanStyle(),
@@ -85,8 +88,13 @@ private fun TextEditorItem.createTextSizeStyle(textSize: TextUnit = TextUnit.Uns
     } else textSize
 }
 
-private fun TextEditorItem.createHighlightSpanStyle(defaultColor: Color) =
-    if (marks.any { it is HighlightMark }) defaultColor else Color.Unspecified
+private fun TextEditorItem.createHighlightSpanStyle(color: Color): Color {
+    if (marks.none { it is HighlightMark } || color == Color.Unspecified) return Color.Unspecified
+    // Paint an opaque highlight translucently so a range selection (drawn beneath the span
+    // background) stays visible over highlighted text; an override that already carries its own alpha
+    // is honored as-is.
+    return if (color.alpha == 1f) color.copy(alpha = HighlightAlpha) else color
+}
 
 private fun TextEditorItem.createLinkSpanStyle() =
     if (marks.any { it is LinkMark || it is UnderlineMark }) TextDecoration.Underline else null
@@ -110,6 +118,9 @@ private fun TextStyleAttrs.createColor(): Color {
  *
  * @throws IllegalArgumentException if the string is not a valid 6/8-digit hex color.
  */
+/** Opacity applied to an opaque highlight color so a text selection still shows through it. */
+private const val HighlightAlpha = 0.4f
+
 internal fun String.toColorInt(): Int = toColorLong().toInt()
 
 /**

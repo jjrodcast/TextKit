@@ -5,7 +5,13 @@ import androidx.compose.ui.graphics.Color
 
 @Immutable
 data class TextKitConfiguration(
-    val highlightColor: Color = Color.Yellow,
+    /**
+     * Background color for text carrying the highlight mark. `null` (the default) makes the highlight
+     * track the active `TextKitTheme`'s `highlight` role (a warm amber), so it adapts to light/dark;
+     * set a color to pin it regardless of theme. Either way an opaque color is painted translucently
+     * so a range selection stays visible over highlighted text.
+     */
+    val highlightColor: Color? = null,
     val linkColor: Color = Color(0xFF1B75D0),
     val textColor: Color = Color(0xFF000000),
     val fontSize: Int = 14,
