@@ -2,7 +2,6 @@ package com.jjrodcast.textkit.ui
 
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import com.jjrodcast.textkit.editor.utils.DocumentUtils
