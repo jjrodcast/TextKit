@@ -17,12 +17,14 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -266,6 +268,17 @@ private fun LinkPopupContent(
 ) {
     val textState = rememberTextFieldState(link.text)
     val urlState = rememberTextFieldState(link.url)
+    // Theme the text fields (input text, cursor, border and label) so they follow TextKit instead of
+    // falling back to the default Material color scheme.
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextKitTheme.colors.onSurface,
+        unfocusedTextColor = TextKitTheme.colors.onSurface,
+        cursorColor = TextKitTheme.colors.primary,
+        focusedBorderColor = TextKitTheme.colors.primary,
+        unfocusedBorderColor = TextKitTheme.colors.outline,
+        focusedLabelColor = TextKitTheme.colors.primary,
+        unfocusedLabelColor = TextKitTheme.colors.onSurfaceVariant,
+    )
     Card(
         modifier = modifier.widthIn(max = 320.dp),
         shape = shape,
@@ -304,19 +317,26 @@ private fun LinkPopupContent(
                 state = textState,
                 lineLimits = TextFieldLineLimits.SingleLine,
                 label = { Text(stringResource(Res.string.text_label)) },
+                colors = fieldColors,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 state = urlState,
                 lineLimits = TextFieldLineLimits.SingleLine,
                 label = { Text(stringResource(Res.string.url_label)) },
+                colors = fieldColors,
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = { onRemove(link) }) {
+                TextButton(
+                    onClick = { onRemove(link) },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = TextKitTheme.colors.error
+                    ),
+                ) {
                     Text(stringResource(Res.string.remove_label))
                 }
                 Spacer(Modifier.size(8.dp))
@@ -328,7 +348,11 @@ private fun LinkPopupContent(
                                 url = urlState.text.toString(),
                             )
                         )
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = TextKitTheme.colors.primary,
+                        contentColor = TextKitTheme.colors.onPrimary,
+                    ),
                 ) {
                     Text(stringResource(Res.string.edit_label))
                 }
