@@ -3,6 +3,9 @@ package com.jjrodcast.textkit
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.core.piecetable.models.Source
 import com.jjrodcast.textkit.editor.core.piecetable.rope.PieceRope
+import com.jjrodcast.textkit.editor.core.piecetable.rope.RopeNode
+import kotlin.math.ceil
+import kotlin.math.log2
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -223,5 +226,89 @@ class PieceRopeTest {
         rope.restore(snapshot)
         assertEquals(listOf(130, 131, 132), ids(rope))
         assertSame(snapshot, rope.snapshot())
+    }
+
+    // ── AVL balance invariant ────────────────────────────────────────────────
+
+    /**
+     * Recursively verifies the AVL invariant and the cached aggregates of every node under
+     * [node], returning the `(size, totalLength)` it independently computed. Asserting these on
+     * the tree behind `snapshot()` proves the rope stays O(log P) tall and that the `size` /
+     * `totalLength` aggregates the O(log P) queries depend on are consistent with the leaves.
+     */
+    private fun assertBalanced(node: RopeNode?): Pair<Int, Int> = when (node) {
+        null -> 0 to 0
+        is RopeNode.Leaf -> {
+            assertEquals(1, node.size, "leaf size")
+            assertEquals(1, node.height, "leaf height")
+            assertEquals(node.piece.length, node.totalLength, "leaf totalLength")
+            1 to node.piece.length
+        }
+
+        is RopeNode.Branch -> {
+            val (leftSize, leftLength) = assertBalanced(node.left)
+            val (rightSize, rightLength) = assertBalanced(node.right)
+            val balanceFactor = node.left.height - node.right.height
+            assertTrue(balanceFactor in -1..1, "AVL balance broken (factor=$balanceFactor)")
+            assertEquals(maxOf(node.left.height, node.right.height) + 1, node.height, "branch height")
+            assertEquals(leftSize + rightSize, node.size, "branch size aggregate")
+            assertEquals(leftLength + rightLength, node.totalLength, "branch totalLength aggregate")
+            (leftSize + rightSize) to (leftLength + rightLength)
+        }
+    }
+
+    /** The tightest known height bound for an AVL tree of [n] nodes: 1.4405·log2(n+2) − 0.3277. */
+    private fun avlHeightCeiling(n: Int): Int = ceil(1.4405 * log2((n + 2).toDouble()) - 0.3277).toInt()
+
+    @Test
+    fun build_from_produces_a_balanced_tree() {
+        val rope = PieceRope().apply { buildFrom((0 until 100).map { piece(it) }) }
+
+        val (size, _) = assertBalanced(rope.snapshot())
+        assertEquals(100, size)
+        assertTrue(rope.snapshot()!!.height <= avlHeightCeiling(100))
+    }
+
+    @Test
+    fun repeated_add_single_stays_balanced() {
+        val rope = PieceRope()
+
+        for (id in 0 until 64) rope.addSingle(piece(id))
+
+        assertEquals((0 until 64).toList(), ids(rope))
+        val (size, _) = assertBalanced(rope.snapshot())
+        assertEquals(64, size)
+        assertTrue(rope.snapshot()!!.height <= avlHeightCeiling(64))
+    }
+
+    @Test
+    fun a_fixed_splice_script_keeps_the_tree_balanced() {
+        // The rope and this plain list are kept in lock-step; comparing them proves the splices
+        // land where expected, while assertBalanced proves the tree self-balances after each one.
+        val rope = PieceRope().apply { buildFrom((0 until 50).map { piece(it) }) }
+        val mirror = (0 until 50).toMutableList()
+        var nextId = 1000
+
+        // (from, to, howManyToInsert) — a fixed, hand-picked mix of inserts, removals and replaces.
+        val script = listOf(
+            Triple(10, 20, 3),   // replace a middle range with fewer pieces
+            Triple(0, 0, 1),     // insert at the very front
+            Triple(0, 5, 0),     // remove a run at the front
+            Triple(5, 5, 12),    // fat insert in the middle
+            Triple(30, 40, 0),   // remove a run near the end
+        )
+
+        for ((from, to, insertCount) in script) {
+            val newPieces = (0 until insertCount).map { piece(nextId++) }
+            rope.splice(from, to, newPieces)
+
+            for (i in to - 1 downTo from) mirror.removeAt(i)
+            mirror.addAll(from, newPieces.map { it.offset })
+
+            assertEquals(mirror, ids(rope), "order after splice($from, $to, +$insertCount)")
+            assertEquals(mirror.size, assertBalanced(rope.snapshot()).first, "balance after splice")
+        }
+
+        assertTrue(rope.snapshot()!!.height <= avlHeightCeiling(rope.size))
     }
 }
