@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
+import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -118,7 +120,10 @@ private fun EmbedPopupContent(
     Card(
         modifier = modifier.widthIn(max = 360.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = TextKitTheme.colors.surface,
+            contentColor = TextKitTheme.colors.onSurface
+        ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
     ) {
         Column(
@@ -138,14 +143,14 @@ private fun EmbedPopupContent(
             HorizontalDivider()
 
             when (embed.embedType) {
-                "image" -> Image(
+                EmbedTypes.Image -> Image(
                     painter = painterResource(Res.drawable.text_kit_banner),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                 )
 
-                "table" -> {
+                EmbedTypes.Table -> {
                     val rows = remember(embed.rawJson) { parseTableRows(embed.rawJson) }
                     if (rows.isNotEmpty()) TableView(rows)
                     else Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)
@@ -176,7 +181,7 @@ private fun TableView(rows: List<DemoTableRow>) {
                     Box(
                         modifier = Modifier
                             .width(120.dp)
-                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant))
+                            .border(BorderStroke(1.dp, TextKitTheme.colors.outlineVariant))
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                     ) {
                         Text(

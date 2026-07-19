@@ -1,20 +1,14 @@
 package com.jjrodcast.textkit.sample
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.editor.models.TextKitTrigger
@@ -25,9 +19,9 @@ import com.jjrodcast.textkit.ui.TextKitEditor
 import com.jjrodcast.textkit.ui.TextKitEmbedPopup
 import com.jjrodcast.textkit.ui.TextKitFormattingBar
 import com.jjrodcast.textkit.ui.TextKitLinkPopup
+import com.jjrodcast.textkit.ui.TextKitScreen
 import com.jjrodcast.textkit.ui.TextKitSlashCommandPopup
 import com.jjrodcast.textkit.ui.TextKitTokenPopup
-import com.jjrodcast.textkit.ui.TextKitScreen
 import com.jjrodcast.textkit.ui.model.TextKitCommand
 import com.jjrodcast.textkit.ui.model.TextKitTokenSuggestion
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
@@ -55,7 +49,13 @@ private val DEMO_TABLE_JSON = """
 
 // A demo local image embed. `src` names the bundled drawable (text_kit_banner.png); the popup maps it
 // to Res.drawable.text_kit_banner. Stored verbatim and round-tripped like any other embed.
-private val DEMO_IMAGE_JSON = """{"type":"image","attrs":{"src":"text_kit_banner"}}"""
+private const val DEMO_IMAGE_JSON = """{"type":"image","attrs":{"src":"text_kit_banner"}}"""
+
+// A demo document embed. Stored verbatim on the placeholder piece and re-emitted on toJson(); the
+// editor shows the "📄 Documento" chip and the popup renders this JSON (there is no custom document
+// renderer, so it falls back to showing the stored attrs).
+private const val DEMO_DOCUMENT_JSON =
+    """{"type":"document","attrs":{"name":"Reporte Q3.pdf","url":"https://example.com/reporte-q3.pdf"}}"""
 
 // Candidates for the '@' mention trigger — persisted as atomic mention chips.
 private val sampleUsers = listOf(
@@ -104,22 +104,29 @@ fun TextKitSample() {
     val state =
         rememberTextKitState(json = DocumentUtils.complexJsonV1, configuration = configuration)
 
-    LaunchedEffect(state.lastMarks, state.lastListItem) {
-        barState.syncFrom(state.lastMarks, state.lastListItem)
+    LaunchedEffect(state.lastMarks, state.lastListItem, state.lastEmbedType) {
+        barState.syncFrom(state.lastMarks, state.lastListItem, state.lastEmbedType)
     }
 
 
-    TextKitScreen {
+    TextKitScreen(modifier = Modifier.padding(16.dp)) {
         TextKitFormattingBar(
-            modifier = Modifier.fillMaxWidth(),
             barState = barState,
-            selectedColor = Color.Yellow,
             onBoldClick = state::applyBold,
             onItalicClick = state::applyItalic,
             onUnderlineClick = state::applyUnderline,
             onStrikeThroughClick = state::applyStrikeThrough,
             onHighlightClick = state::applyHighlight,
             onLinkClick = { state.applyLink() },
+            onImageClick = {
+                state.insertEmbed(EmbedTypes.Image, DEMO_IMAGE_JSON, "🖼 Imagen")
+            },
+            onTableClick = {
+                state.insertEmbed(EmbedTypes.Table, DEMO_TABLE_JSON, "📊 Tabla")
+            },
+            onDocumentClick = {
+                state.insertEmbed(EmbedTypes.Document, DEMO_DOCUMENT_JSON, "📄 Documento")
+            },
             onTextAndColorClick = { state.openColorPicker(it) },
             onOrderedListClick = state::toggleOrderedList,
             onBulletedListClick = state::toggleUnorderedList,
@@ -129,34 +136,6 @@ fun TextKitSample() {
             canRedo = state.canRedo
         )
         Spacer(Modifier.size(6.dp))
-        // Demo: insert an embedded table. It shows as a one-line placeholder ("📊 Tabla"); click it
-        // to open the popup that renders the real table and lets you delete it.
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedButton(onClick = {
-                state.insertEmbed(
-                    EmbedTypes.Table,
-                    DEMO_TABLE_JSON,
-                    "📊 Tabla"
-                )
-            }) {
-                Text("Insertar tabla")
-            }
-            OutlinedButton(onClick = {
-                state.insertEmbed(
-                    EmbedTypes.Image,
-                    DEMO_IMAGE_JSON,
-                    "🖼 Imagen"
-                )
-            }) {
-                Text("Insertar imagen")
-            }
-        }
-        Spacer(Modifier.size(6.dp))
-        // Wrap the editor in a Box so the popup overlays it (shares its coordinate space) and
-        // positions itself next to the tapped link.
         Box {
             TextKitEditor(
                 state = state,

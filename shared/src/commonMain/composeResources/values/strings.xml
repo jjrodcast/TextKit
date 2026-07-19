@@ -6,6 +6,9 @@
     <string name="strikethrough_text">Strikethrough</string>
     <string name="highlight_text">Highlight</string>
     <string name="link_text">Link</string>
+    <string name="image_text">Image</string>
+    <string name="table_text">Table</string>
+    <string name="document_text">Document</string>
     <string name="ordered_list_text">Ordered list</string>
     <string name="bulleted_list_text">Bulleted list</string>
     <string name="undo_text">Undo</string>

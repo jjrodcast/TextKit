@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.model.TextKitCommand
 import com.jjrodcast.textkit.ui.state.TextKitState
 import kotlin.math.roundToInt
@@ -98,7 +99,10 @@ fun TextKitSlashCommandPopup(
                 .widthIn(min = 180.dp, max = 280.dp)
                 .onSizeChanged { cardSize = it },
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(
+                containerColor = TextKitTheme.colors.surface,
+                contentColor = TextKitTheme.colors.onSurface
+            ),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
         ) {
             Column(
