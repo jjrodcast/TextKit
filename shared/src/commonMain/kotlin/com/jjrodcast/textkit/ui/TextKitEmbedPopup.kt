@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragIndicator
@@ -32,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -42,6 +44,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
@@ -99,11 +102,20 @@ fun TextKitEmbedPopup(
 
         // Add the user's drag, then clamp so the card stays fully on-screen — this is what keeps a
         // large table popup reachable in landscape, where the anchor may sit off the visible area.
-        val x = (baseX + dragOffset.x.roundToInt()).coerceIn(0, (maxW - cardSize.width).coerceAtLeast(0))
-        val y = (baseY + dragOffset.y.roundToInt()).coerceIn(0, (maxH - cardSize.height).coerceAtLeast(0))
+        val x = (baseX + dragOffset.x.roundToInt())
+            .coerceIn(
+                0, (maxW - cardSize.width)
+                    .coerceAtLeast(0)
+            )
+        val y = (baseY + dragOffset.y.roundToInt())
+            .coerceIn(
+                0, (maxH - cardSize.height)
+                    .coerceAtLeast(0)
+            )
 
         // Never let the card exceed the viewport height; its content scrolls within this cap.
-        val availableHeight = with(density) { maxH.toDp() } - 16.dp
+        val availableHeight = (with(density) { maxH.toDp() } - 16.dp)
+            .coerceAtLeast(0.dp)
 
         EmbedPopupContent(
             embed = embed,
@@ -168,7 +180,10 @@ private fun EmbedPopupContent(
                     modifier = Modifier.weight(1f).padding(start = 6.dp),
                 )
                 IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Rounded.Close, contentDescription = stringResource(Res.string.close_text))
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = stringResource(Res.string.close_text)
+                    )
                 }
             }
             HorizontalDivider()
@@ -190,7 +205,14 @@ private fun EmbedPopupContent(
                     )
 
                     // Any other embed: show the stored JSON so it is at least inspectable.
-                    else -> Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)
+                    else -> {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            Text(text = embed.rawJson, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
 

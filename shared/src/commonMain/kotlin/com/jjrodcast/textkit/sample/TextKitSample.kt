@@ -189,7 +189,7 @@ fun TextKitTable() {
                 TextKitEditableTable(
                     rawJson = DEMO_TABLE_JSON,
                     onSync = { json ->
-                        println("json $json")
+                        // Every change is captured here with the new json structure
                     },
                     modifier = Modifier.padding(16.dp),
                 )
