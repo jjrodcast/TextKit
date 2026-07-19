@@ -5,9 +5,9 @@
 TextKit is a rope-backed, piece-table rich-text editor engine for **Compose Multiplatform**
 (Android, iOS, Desktop/JVM and Web — Wasm & JS). It ships a `TextKitState` holder, ready-made
 editor composables, a formatting bar, link popups, a generalized **trigger** system (mentions,
-hashtags, slash commands), **embedded blocks** (tables, images and other non-renderable content
-as clickable placeholders), full **undo/redo** with coalescing, and lossless (de)serialization
-to a **ProseMirror-style JSON document**.
+hashtags, slash commands), **embedded blocks** (images and other non-renderable content as clickable
+placeholders, plus fully **editable tables**), full **undo/redo** with coalescing, and lossless
+(de)serialization to a **ProseMirror-style JSON document**.
 
 Unlike editors that round-trip through HTML or Markdown, TextKit persists a structured JSON document
 (`type: "doc"` → block nodes → inline runs with marks), so styling, lists, links and inline tokens
@@ -345,6 +345,27 @@ Box {
 }
 ```
 
+### Editable tables
+
+`table` embeds get a full **editable, Notion-style grid** inside the popup — no extra wiring needed.
+`TextKitEmbedPopup` renders `TextKitEditableTable` for `EmbedTypes.Table` and defaults its `onSync` to
+`state.updateActiveEmbed(...)`, so users can add/remove rows and columns, merge and split cells (true
+`colspan`/`rowspan`), toggle header cells and edit text inline. Every change **auto-syncs** back to the
+document (there is no manual save step), the table carries its **own undo/redo**, and its JSON
+round-trips losslessly as a `table` block.
+
+You can also host the table yourself — it's a self-contained composable taking just `rawJson` and an
+`onSync` callback:
+
+```kotlin
+import com.jjrodcast.textkit.ui.table.TextKitEditableTable
+
+TextKitEditableTable(rawJson = tableJson, onSync = { updated -> /* persist updated table JSON */ })
+```
+
+See **[docs/table](docs/table/README.md)** for the interaction model, merge/split rules, the `table`
+JSON shape, theming and layout details.
+
 To let users insert embeds from the `/` menu, wrap `insertEmbed` in a custom slash command:
 
 ```kotlin
@@ -593,6 +614,10 @@ The block's original JSON is stored verbatim, so it round-trips unchanged:
 ```json
 { "type": "image", "attrs": { "src": "text_kit_banner" } }
 ```
+
+`table` embeds are fully editable in the popup and serialize as a ProseMirror `table`
+(`tableRow` → `tableCell` / `tableHeader` with `colspan` / `rowspan` / `colwidth`) — see
+**[docs/table](docs/table/README.md)** for the shape and editor.
 
 **Marks** (on inline runs): `bold`, `italic`, `underline`, `strike`, `highlight`, `link`
 (`attrs.href`, `attrs.target`), and `textStyle` (`attrs.color`, `attrs.fontSize`).
