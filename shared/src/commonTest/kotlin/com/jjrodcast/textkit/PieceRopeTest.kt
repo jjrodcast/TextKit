@@ -5,6 +5,10 @@ import com.jjrodcast.textkit.editor.core.piecetable.models.Source
 import com.jjrodcast.textkit.editor.core.piecetable.rope.PieceRope
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /**
  * Direct unit tests for [PieceRope], the AVL-balanced rope that backs the piece table.
@@ -133,5 +137,91 @@ class PieceRopeTest {
         rope.splice(from = 1, to = 3, replacements = listOf(piece(90), piece(91)))
 
         assertEquals(listOf(70, 90, 91, 73, 74), ids(rope))
+    }
+
+    // ── Edge cases ───────────────────────────────────────────────────────────
+
+    @Test
+    fun a_fresh_rope_is_empty() {
+        val rope = PieceRope()
+
+        assertTrue(rope.isEmpty())
+        assertEquals(0, rope.size)
+        assertEquals(0, rope.totalLength)
+        assertNull(rope.firstOrNull())
+        assertEquals(emptyList(), rope.toList())
+    }
+
+    @Test
+    fun endpoint_access_on_an_empty_rope_fails() {
+        val rope = PieceRope()
+
+        assertFailsWith<IndexOutOfBoundsException> { rope.get(0) }
+        assertFailsWith<NoSuchElementException> { rope.first() }
+        assertFailsWith<NoSuchElementException> { rope.last() }
+    }
+
+    @Test
+    fun building_from_an_empty_list_yields_an_empty_rope() {
+        val rope = PieceRope().apply { buildFrom(emptyList()) }
+
+        assertTrue(rope.isEmpty())
+        assertEquals(0, rope.size)
+    }
+
+    @Test
+    fun a_single_piece_rope_reports_that_piece_at_every_endpoint() {
+        val rope = ropeOf(piece(id = 100, length = 6))
+
+        assertEquals(1, rope.size)
+        assertEquals(6, rope.totalLength)
+        assertEquals(100, rope.get(0).offset)
+        assertEquals(100, rope.first().offset)
+        assertEquals(100, rope.last().offset)
+        assertEquals(0, rope.getOffsetAt(0))
+    }
+
+    @Test
+    fun find_by_document_offset_maps_offsets_to_the_containing_piece() {
+        // Lengths 3, 4, 5 → cumulative ends 3, 7, 12. Piece start offsets 0, 3, 7.
+        val rope = ropeOf(
+            piece(id = 110, length = 3),
+            piece(id = 111, length = 4),
+            piece(id = 112, length = 5),
+        )
+
+        // Offset 0 and offsets inside the first piece resolve to piece 0 (start 0).
+        assertEquals(0 to 0, rope.findByDocumentOffset(0))
+        assertEquals(0 to 0, rope.findByDocumentOffset(3))
+        // Offset 4 falls in the second piece (start 3).
+        assertEquals(1 to 3, rope.findByDocumentOffset(4))
+        assertEquals(1 to 3, rope.findByDocumentOffset(7))
+        // Offset 8 falls in the third piece (start 7).
+        assertEquals(2 to 7, rope.findByDocumentOffset(8))
+    }
+
+    @Test
+    fun splice_can_empty_the_rope() {
+        val rope = ropeOf(piece(120), piece(121), piece(122))
+
+        rope.splice(from = 0, to = 3, replacements = emptyList())
+
+        assertTrue(rope.isEmpty())
+        assertEquals(0, rope.size)
+    }
+
+    @Test
+    fun snapshot_and_restore_round_trips_the_document() {
+        val rope = ropeOf(piece(130), piece(131), piece(132))
+        val snapshot = rope.snapshot()
+
+        // Mutate away from the snapshot…
+        rope.splice(from = 1, to = 2, replacements = listOf(piece(140), piece(141)))
+        assertEquals(listOf(130, 140, 141, 132), ids(rope))
+
+        // …then restore it exactly.
+        rope.restore(snapshot)
+        assertEquals(listOf(130, 131, 132), ids(rope))
+        assertSame(snapshot, rope.snapshot())
     }
 }
