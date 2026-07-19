@@ -222,8 +222,16 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
 
     // region Embedded blocks (tables, images, documents, …)
 
-    /** A placeholder currently in the document: its [range], the block [rawJson] and its [embedType]. */
-    data class EmbedInfo(val range: TextRange, val embedType: String, val rawJson: String)
+    /**
+     * A placeholder currently in the document: its [range], the block [rawJson], its [embedType] and
+     * the visible [label] shown in the editor (e.g. "📊 Table").
+     */
+    data class EmbedInfo(
+        val range: TextRange,
+        val embedType: String,
+        val rawJson: String,
+        val label: String,
+    )
 
     private var embedSeq = 0
 
@@ -290,7 +298,8 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
                     return EmbedInfo(
                         range = TextRange(child.start, child.end),
                         embedType = embedTypeOf(payload),
-                        rawJson = payload
+                        rawJson = payload,
+                        label = child.embedLabel ?: child.text.trimEnd('\n')
                     )
                 }
             }

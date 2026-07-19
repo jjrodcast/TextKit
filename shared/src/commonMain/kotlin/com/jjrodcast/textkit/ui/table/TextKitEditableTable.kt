@@ -105,7 +105,7 @@ fun TextKitEditableTable(
     SideEffect { state.setOnChange(onSync) }
 
     // Reload only on a *genuine* external change. Fast path: exact match with what we last emitted is
-    // our own echo → ignore. Otherwise compare canonically so cosmetic reformatting from the host
+    // our own echo → ignore. Otherwise, compare canonically so cosmetic reformatting from the host
     // doesn't force a rebuild that would drop focus/selection.
     LaunchedEffect(rawJson) {
         if (rawJson != state.lastSyncedRaw &&
@@ -232,9 +232,6 @@ private fun TextKitTableGrid(
     state: TextKitEditableTableState,
     modifier: Modifier = Modifier
 ) {
-    // Read `version` so structural mutations trigger a recomposition + re-measure, and `blockRect`
-    // (which reads the selection) so cell highlighting refreshes when the selection changes.
-    @Suppress("UNUSED_VARIABLE") val version = state.version
     val rect = state.blockRect()
     val anchors = state.anchors()
     val rowCount = state.rows()

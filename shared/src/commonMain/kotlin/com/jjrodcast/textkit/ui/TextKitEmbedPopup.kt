@@ -163,7 +163,7 @@ private fun EmbedPopupContent(
                     modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = embed.embedType.replaceFirstChar { it.uppercase() },
+                    text = embed.label,
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f).padding(start = 6.dp),
                 )
