@@ -1,12 +1,9 @@
 package com.jjrodcast.textkit
 
-import androidx.compose.ui.text.TextRange
-import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.utils.DocumentUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -17,46 +14,6 @@ import kotlin.test.assertTrue
  * corrected behavior.
  */
 class PotentialBugsTest {
-
-    /**
-     * BUG: Converting the **first** list item in the document (which starts at offset 0) back to a
-     * plain paragraph crashes.
-     *
-     * `ListItemTransaction.updateListItemToParagraph` computes the new cursor as
-     * `TextRange(range.start - length, range.end - length)` where `length` is the removed decorator
-     * width. For the first item `range.start` is at/near 0, so the subtraction underflows to a
-     * negative value and `TextRange` throws `IllegalArgumentException: start and end cannot be negative`.
-     *
-     * EXPECTED: the item should convert to a paragraph and the cursor should be clamped to `>= 0`,
-     * exactly like the (working) non-first-item case in
-     * [ListsAndDecoratorsTest.converts_a_non_first_list_item_back_to_a_paragraph].
-     */
-    @Test
-    fun converting_the_first_list_item_to_paragraph_currently_crashes() {
-        val editor = editorFrom(SampleDocuments.ORDERED_LIST)
-
-        assertFailsWith<IllegalArgumentException> {
-            editor.toListItem(
-                range = TextRange(0, 5),
-                from = TextEditorListItem.NumberedList,
-                to = TextEditorListItem.None
-            )
-        }
-    }
-
-    /**
-     * Same underflow, reached through a bulleted list, to show it is not specific to numbered lists.
-     */
-    @Test
-    fun converting_the_first_bulleted_item_to_paragraph_currently_crashes() {
-        // Start from a plain paragraph, turn it into a bullet, then try to turn it back.
-        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
-        editor.toListItem(TextRange(0, 5), TextEditorListItem.None, TextEditorListItem.BulletedList)
-
-        assertFailsWith<IllegalArgumentException> {
-            editor.toListItem(TextRange(0, 5), TextEditorListItem.BulletedList, TextEditorListItem.None)
-        }
-    }
 
     /**
      * BUG: Re-serializing [DocumentUtils.complexJsonV3] is not idempotent.
