@@ -32,7 +32,7 @@ fun TextKitTheme(
     typography: TextKitTypography = TextKitTypography.default(),
     shapes: TextKitShapes = TextKitShapes(),
     content: @Composable () -> Unit
-)
+) {
     val theme = TextKitTheme(
         colors = colors,
         typography = typography,
