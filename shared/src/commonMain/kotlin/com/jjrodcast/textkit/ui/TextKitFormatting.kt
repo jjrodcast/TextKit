@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -85,9 +86,10 @@ import textkit.shared.generated.resources.undo_text
 @Composable
 fun TextKitScreen(
     modifier: Modifier = Modifier,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    TextKitTheme {
+    TextKitTheme(darkTheme = darkTheme) {
         Scaffold(
             containerColor = TextKitTheme.colors.background,
             contentColor = TextKitTheme.colors.onBackground

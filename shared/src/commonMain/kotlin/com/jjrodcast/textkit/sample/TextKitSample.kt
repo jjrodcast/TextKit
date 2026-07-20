@@ -1,17 +1,30 @@
 package com.jjrodcast.textkit.sample
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.editor.models.TextKitTrigger
@@ -30,7 +43,6 @@ import com.jjrodcast.textkit.ui.model.TextKitCommand
 import com.jjrodcast.textkit.ui.model.TextKitTokenSuggestion
 import com.jjrodcast.textkit.ui.state.rememberTextKitFormattingBarState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
-import com.jjrodcast.textkit.ui.table.TextKitEditableTable
 import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 
 // A demo table (ProseMirror shape) inserted by the "Insertar tabla" button. It is stored verbatim on
@@ -113,88 +125,206 @@ fun TextKitSample() {
         barState.syncFrom(state.lastMarks, state.lastListItem, state.lastEmbedType)
     }
 
-
     TextKitScreen(modifier = Modifier.padding(16.dp)) {
-        TextKitFormattingBar(
-            barState = barState,
-            onBoldClick = state::applyBold,
-            onItalicClick = state::applyItalic,
-            onUnderlineClick = state::applyUnderline,
-            onStrikeThroughClick = state::applyStrikeThrough,
-            onHighlightClick = state::applyHighlight,
-            onLinkClick = { state.applyLink() },
-            onImageClick = {
-                state.insertEmbed(EmbedTypes.Image, DEMO_IMAGE_JSON, "🖼 Imagen")
-            },
-            onTableClick = {
-                state.insertEmbed(EmbedTypes.Table, DEMO_TABLE_JSON, "📊 Tabla")
-            },
-            onDocumentClick = {
-                state.insertEmbed(EmbedTypes.Document, DEMO_DOCUMENT_JSON, "📄 Documento")
-            },
-            onTextAndColorClick = { state.openColorPicker(it) },
-            onOrderedListClick = state::toggleOrderedList,
-            onBulletedListClick = state::toggleUnorderedList,
-            onUndoClick = { state.undo() },
-            onRedoClick = { state.redo() },
-            canUndo = state.canUndo,
-            canRedo = state.canRedo
-        )
-        Spacer(Modifier.size(6.dp))
-        Box {
-            TextKitEditor(
-                state = state,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp)
-            )
-            // Popup for embedded blocks: renders the table and offers "Eliminar".
-            TextKitEmbedPopup(state = state)
-            TextKitColorsPopup(
-                state = state,
-                colors = barState.colors
-            )
-            TextKitLinkPopup(
-                state = state,
-                onEdit = { link ->
-                    state.updateLinkText(newText = link.text, url = link.url, range = link.range)
+        Column(modifier = Modifier.fillMaxSize()) {
+            TextKitFormattingBar(
+                barState = barState,
+                onBoldClick = state::applyBold,
+                onItalicClick = state::applyItalic,
+                onUnderlineClick = state::applyUnderline,
+                onStrikeThroughClick = state::applyStrikeThrough,
+                onHighlightClick = state::applyHighlight,
+                onLinkClick = { state.applyLink() },
+                onImageClick = {
+                    state.insertEmbed(EmbedTypes.Image, DEMO_IMAGE_JSON, "🖼 Imagen")
                 },
-                onRemove = { link -> state.removeLink(link.range) },
+                onTableClick = {
+                    state.insertEmbed(EmbedTypes.Table, DEMO_TABLE_JSON, "📊 Tabla")
+                },
+                onDocumentClick = {
+                    state.insertEmbed(EmbedTypes.Document, DEMO_DOCUMENT_JSON, "📄 Documento")
+                },
+                onTextAndColorClick = { state.openColorPicker(it) },
+                onOrderedListClick = state::toggleOrderedList,
+                onBulletedListClick = state::toggleUnorderedList,
+                onUndoClick = { state.undo() },
+                onRedoClick = { state.redo() },
+                canUndo = state.canUndo,
+                canRedo = state.canRedo
             )
-            // Atomic-token popup for '@' mentions and '#' hashtags (candidates by active trigger).
-            TextKitTokenPopup(state = state) { trigger ->
-                when (trigger) {
-                    is TextKitTrigger.TextKitHashtagTrigger -> sampleTags
-                    else -> sampleUsers
+            Spacer(Modifier.size(6.dp))
+            Box {
+                TextKitEditor(
+                    state = state,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp)
+                )
+                // Popup for embedded blocks: renders the table and offers "Eliminar".
+                TextKitEmbedPopup(state = state)
+                TextKitColorsPopup(
+                    state = state,
+                    colors = barState.colors
+                )
+                TextKitLinkPopup(
+                    state = state,
+                    onEdit = { link ->
+                        state.updateLinkText(
+                            newText = link.text,
+                            url = link.url,
+                            range = link.range
+                        )
+                    },
+                    onRemove = { link -> state.removeLink(link.range) },
+                )
+                // Atomic-token popup for '@' mentions and '#' hashtags (candidates by active trigger).
+                TextKitTokenPopup(state = state) { trigger ->
+                    when (trigger) {
+                        is TextKitTrigger.TextKitHashtagTrigger -> sampleTags
+                        else -> sampleUsers
+                    }
                 }
+                // Slash-command popup for '/': runs actions (heading/list/custom) instead of inserting.
+                TextKitSlashCommandPopup(state = state, commands = sampleCommands)
             }
-            // Slash-command popup for '/': runs actions (heading/list/custom) instead of inserting.
-            TextKitSlashCommandPopup(state = state, commands = sampleCommands)
         }
     }
 }
 
 @Composable
-fun TextKitTable() {
-    TextKitTheme {
-        Scaffold(
-            containerColor = TextKitTheme.colors.background,
-            contentColor = TextKitTheme.colors.onBackground
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .background(TextKitTheme.colors.background)
-                    .padding(innerPadding)
+fun TextKitSampleNonMobile(
+    isDarkTheme: Boolean = isSystemInDarkTheme()
+) {
+    var isDarkTheme by rememberSaveable { mutableStateOf(isDarkTheme) }
+    val barState = rememberTextKitFormattingBarState(colors = TextKitPickerPallete.DefaultPallete)
+    val configuration = remember {
+        createTextKitConfiguration {
+            addTrigger { TextKitTrigger.TextKitMentionTrigger() }
+            addTrigger { TextKitTrigger.TextKitHashtagTrigger() }
+            addTrigger { TextKitTrigger.TextKitSlashTrigger() }
+        }
+    }
+    val state =
+        rememberTextKitState(json = DocumentUtils.complexJsonV1, configuration = configuration)
+
+    LaunchedEffect(state.lastMarks, state.lastListItem, state.lastEmbedType) {
+        barState.syncFrom(state.lastMarks, state.lastListItem, state.lastEmbedType)
+    }
+
+    TextKitScreen(
+        modifier = Modifier.padding(16.dp),
+        darkTheme = isDarkTheme
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.TopEnd
             ) {
-                TextKitEditableTable(
-                    rawJson = DEMO_TABLE_JSON,
-                    onSync = { json ->
-                        // Every change is captured here with the new json structure
-                    },
-                    modifier = Modifier.padding(16.dp),
+                TextKitLightDarkModeIcon(
+                    isDarkTheme = isDarkTheme,
+                    onChange = {
+                        isDarkTheme = it
+                    }
                 )
+            }
+            TextKitFormattingBar(
+                barState = barState,
+                onBoldClick = state::applyBold,
+                onItalicClick = state::applyItalic,
+                onUnderlineClick = state::applyUnderline,
+                onStrikeThroughClick = state::applyStrikeThrough,
+                onHighlightClick = state::applyHighlight,
+                onLinkClick = { state.applyLink() },
+                onImageClick = {
+                    state.insertEmbed(EmbedTypes.Image, DEMO_IMAGE_JSON, "🖼 Imagen")
+                },
+                onTableClick = {
+                    state.insertEmbed(EmbedTypes.Table, DEMO_TABLE_JSON, "📊 Tabla")
+                },
+                onDocumentClick = {
+                    state.insertEmbed(EmbedTypes.Document, DEMO_DOCUMENT_JSON, "📄 Documento")
+                },
+                onTextAndColorClick = { state.openColorPicker(it) },
+                onOrderedListClick = state::toggleOrderedList,
+                onBulletedListClick = state::toggleUnorderedList,
+                onUndoClick = { state.undo() },
+                onRedoClick = { state.redo() },
+                canUndo = state.canUndo,
+                canRedo = state.canRedo
+            )
+            Spacer(Modifier.size(6.dp))
+            Box {
+                TextKitEditor(
+                    state = state,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp)
+                )
+                // Popup for embedded blocks: renders the table and offers "Eliminar".
+                TextKitEmbedPopup(state = state)
+                TextKitColorsPopup(
+                    state = state,
+                    colors = barState.colors
+                )
+                TextKitLinkPopup(
+                    state = state,
+                    onEdit = { link ->
+                        state.updateLinkText(
+                            newText = link.text,
+                            url = link.url,
+                            range = link.range
+                        )
+                    },
+                    onRemove = { link -> state.removeLink(link.range) },
+                )
+                // Atomic-token popup for '@' mentions and '#' hashtags (candidates by active trigger).
+                TextKitTokenPopup(state = state) { trigger ->
+                    when (trigger) {
+                        is TextKitTrigger.TextKitHashtagTrigger -> sampleTags
+                        else -> sampleUsers
+                    }
+                }
+                // Slash-command popup for '/': runs actions (heading/list/custom) instead of inserting.
+                TextKitSlashCommandPopup(state = state, commands = sampleCommands)
             }
         }
     }
+}
 
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun TextKitLightDarkModeIcon(
+    isDarkTheme: Boolean = isSystemInDarkTheme(),
+    onChange: (Boolean) -> Unit
+) {
+    var painter by remember {
+        mutableStateOf(if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode)
+    }
+    var isChecked by rememberSaveable { mutableStateOf(isDarkTheme) }
+
+    ToggleButton(
+        checked = isChecked,
+        onCheckedChange = {
+            painter = if (it) {
+                Icons.Rounded.DarkMode
+            } else {
+                Icons.Rounded.LightMode
+            }
+            isChecked = it
+            onChange(isChecked)
+        },
+        colors = ToggleButtonDefaults.toggleButtonColors(
+            containerColor = TextKitTheme.colors.primary,
+            checkedContainerColor = TextKitTheme.colors.primary,
+            contentColor = TextKitTheme.colors.onPrimary,
+            checkedContentColor = TextKitTheme.colors.onPrimary
+        )
+    ) {
+        Icon(
+            painter = rememberVectorPainter(painter),
+            contentDescription = null
+        )
+    }
 }
