@@ -105,9 +105,25 @@ val plain: String = state.textFieldValue.text
 
 // The full structured document (ProseMirror-style JSON) — use this to persist:
 val json: String = state.toJson()
+
+// The same document as HTML — use this to export/share:
+val html: String = state.toHtml()
 ```
 
 `toJson()` is lossless: marks, lists, links and inline tokens (mentions, hashtags) are all preserved.
+
+`toHtml()` is **export only** — the editor is still loaded from, and persisted as, the JSON produced
+by `toJson()`. It emits semantic markup (`<strong>`, `<em>`, `<blockquote>`, …) rather than inline
+styles; the one exception is a text style (colour + font size), which has no semantic equivalent and
+becomes a `<span style="…">`. Task items keep a real, enabled `<input type="checkbox">` so the
+exported markup stays interactive, and inline tokens carry their identity on `data-type` / `data-id`:
+
+```html
+<p>Hi <span data-type="mention" data-id="42">@ada</span></p>
+<ul data-type="taskList">
+  <li data-type="taskItem" data-checked="true"><input type="checkbox" checked><p>done</p></li>
+</ul>
+```
 
 ## Inline styling
 
