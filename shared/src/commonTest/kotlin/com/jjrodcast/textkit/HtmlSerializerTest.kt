@@ -253,9 +253,13 @@ class HtmlSerializerTest {
     // ── Inline tokens ────────────────────────────────────────────────────────
 
     @Test
-    fun exports_tokens_as_their_visible_label() {
+    fun exports_tokens_with_their_label_and_identity() {
         assertEquals(
-            "<p>@ada #kotlin</p>",
+            "<p>" +
+                "<span data-type=\"mention\" data-id=\"1\">@ada</span>" +
+                " " +
+                "<span data-type=\"hashtag\" data-id=\"2\">#kotlin</span>" +
+                "</p>",
             html(
                 Paragraph(
                     listOf(
@@ -265,6 +269,110 @@ class HtmlSerializerTest {
                     ),
                 ),
             ),
+        )
+    }
+
+    @Test
+    fun applies_marks_around_a_token() {
+        assertEquals(
+            "<p><strong><span data-type=\"mention\" data-id=\"7\">@ada</span></strong></p>",
+            html(
+                Paragraph(
+                    listOf(Mention(TokenAttrs(id = "7", label = "ada"), marks = setOf(BoldMark()))),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun escapes_a_token_label_and_id() {
+        assertEquals(
+            "<p><span data-type=\"mention\" data-id=\"a&quot;b\">@a&lt;b</span></p>",
+            html(Paragraph(listOf(Mention(TokenAttrs(id = "a\"b", label = "a<b"))))),
+        )
+    }
+
+    // ── Embedded blocks ──────────────────────────────────────────────────────
+
+    @Test
+    fun exports_a_table_with_header_and_body_cells() {
+        val json = """
+            {"type":"doc","content":[
+              {"type":"table","content":[
+                {"type":"tableRow","content":[
+                  {"type":"tableHeader","attrs":{"colspan":1,"rowspan":1,"colwidth":null},
+                   "content":[{"type":"paragraph","content":[{"type":"text","text":"Name"}]}]}
+                ]},
+                {"type":"tableRow","content":[
+                  {"type":"tableCell","attrs":{"colspan":1,"rowspan":1,"colwidth":null},
+                   "content":[{"type":"paragraph","content":[{"type":"text","text":"Juan"}]}]}
+                ]}
+              ]}
+            ]}
+        """
+
+        assertEquals(
+            "<table>" +
+                "<tr><th><p>Name</p></th></tr>" +
+                "<tr><td><p>Juan</p></td></tr>" +
+                "</table>",
+            editorFrom(json).toHtml(),
+        )
+    }
+
+    @Test
+    fun emits_table_cell_spans_only_when_they_span() {
+        val json = """
+            {"type":"doc","content":[
+              {"type":"table","content":[
+                {"type":"tableRow","content":[
+                  {"type":"tableCell","attrs":{"colspan":2,"rowspan":1,"colwidth":null},
+                   "content":[{"type":"paragraph","content":[{"type":"text","text":"wide"}]}]},
+                  {"type":"tableCell","attrs":{"colspan":1,"rowspan":1,"colwidth":null},
+                   "content":[{"type":"paragraph","content":[{"type":"text","text":"narrow"}]}]}
+                ]}
+              ]}
+            ]}
+        """
+
+        assertEquals(
+            "<table><tr>" +
+                "<td colspan=\"2\"><p>wide</p></td>" +
+                "<td><p>narrow</p></td>" +
+                "</tr></table>",
+            editorFrom(json).toHtml(),
+        )
+    }
+
+    @Test
+    fun exports_an_image_with_its_source() {
+        val json = """
+            {"type":"doc","content":[
+              {"type":"image","attrs":{"src":"photo.png","alt":"A photo"}}
+            ]}
+        """
+
+        assertEquals("<img src=\"photo.png\" alt=\"A photo\">", editorFrom(json).toHtml())
+    }
+
+    @Test
+    fun exports_an_image_without_an_alt_as_an_empty_alt() {
+        val json = """{"type":"doc","content":[{"type":"image","attrs":{"src":"x.png"}}]}"""
+
+        assertEquals("<img src=\"x.png\" alt=\"\">", editorFrom(json).toHtml())
+    }
+
+    @Test
+    fun keeps_an_unrecognised_embed_as_an_element_rather_than_dropping_it() {
+        val json = """
+            {"type":"doc","content":[
+              {"type":"document","attrs":{"id":"doc-7"}}
+            ]}
+        """
+
+        assertEquals(
+            "<div data-type=\"document\" data-id=\"doc-7\"></div>",
+            editorFrom(json).toHtml(),
         )
     }
 
