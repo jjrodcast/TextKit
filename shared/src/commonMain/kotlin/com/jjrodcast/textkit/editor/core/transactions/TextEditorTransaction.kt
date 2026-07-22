@@ -38,10 +38,17 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
 
     override val json: String
         get() {
-            val document = PieceTableConverter.getNewDocument(pieceTable)
-            return if (document.content.isEmpty()) EMPTY_JSON
-            else TEXT_EDITOR_JSON.encodeToString(TextEditorDocument.serializer(), document)
+            val current = document
+            return if (current.content.isEmpty()) EMPTY_JSON
+            else TEXT_EDITOR_JSON.encodeToString(TextEditorDocument.serializer(), current)
         }
+
+    /**
+     * The current document as a parsed AST. Exposed so export formats other than JSON (see
+     * `editor.core.export.DocumentSerializer`) can walk the same tree the JSON encoder uses.
+     */
+    internal val document: TextEditorDocument
+        get() = PieceTableConverter.getNewDocument(pieceTable)
 
     override fun loadWith(
         initialJson: String,

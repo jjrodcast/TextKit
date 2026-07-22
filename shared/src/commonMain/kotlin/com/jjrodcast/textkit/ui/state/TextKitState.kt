@@ -380,6 +380,12 @@ class TextKitState(
     fun toJson() = manager.toJson()
 
     /**
+     * Exports the current document as semantic HTML. Export only: the editor is still loaded from,
+     * and persisted as, the JSON produced by [toJson].
+     */
+    fun toHtml() = manager.toHtml()
+
+    /**
      * Receives the editor's latest [TextLayoutResult]; wire it to the text field's `onTextLayout`.
      * It backs coordinate-based lookups such as link hit-testing and [linkBoundingBox], so those
      * return nothing until the first layout pass has run.
