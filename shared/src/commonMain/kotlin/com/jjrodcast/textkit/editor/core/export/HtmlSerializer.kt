@@ -6,12 +6,14 @@ import com.jjrodcast.textkit.editor.core.parser.Blockquote
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
 import com.jjrodcast.textkit.editor.core.parser.BulletedList
 import com.jjrodcast.textkit.editor.core.parser.EmbedBlock
+import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
 import com.jjrodcast.textkit.editor.core.parser.HardBreak
 import com.jjrodcast.textkit.editor.core.parser.Hashtag
 import com.jjrodcast.textkit.editor.core.parser.HashtagType
 import com.jjrodcast.textkit.editor.core.parser.Heading
 import com.jjrodcast.textkit.editor.core.parser.HeadingLevels
 import com.jjrodcast.textkit.editor.core.parser.HighlightMark
+import com.jjrodcast.textkit.editor.core.parser.InlineToken
 import com.jjrodcast.textkit.editor.core.parser.ItalicMark
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.ListItem
@@ -23,6 +25,7 @@ import com.jjrodcast.textkit.editor.core.parser.OrderedList
 import com.jjrodcast.textkit.editor.core.parser.Paragraph
 import com.jjrodcast.textkit.editor.core.parser.ParagraphNone
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
+import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
@@ -30,6 +33,13 @@ import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs.Companion.UNSET_FONT_SIZE
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Exports a [TextEditorDocument] as semantic HTML.
@@ -38,9 +48,9 @@ import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
  * the only inline style emitted is for `textStyle`, which carries a colour and font size that have no
  * semantic equivalent.
  *
- * Block nodes the editor keeps as opaque embeds (tables, images, …) are not emitted yet — see
- * [EmbedBlock]. Inline tokens (mentions, hashtags) are emitted as their visible label text; carrying
- * their identity in `data-*` attributes is deferred to the same follow-up.
+ * Opaque embedded blocks are rendered from the verbatim JSON the editor keeps in [EmbedBlock.raw]:
+ * tables become real `<table>` markup and images `<img>`. Inline tokens (mentions, hashtags) keep
+ * their identity in `data-*` attributes alongside the visible label.
  */
 internal class HtmlSerializer : DocumentSerializer {
 
@@ -74,10 +84,74 @@ internal class HtmlSerializer : DocumentSerializer {
 
         is Blockquote -> tag("blockquote", paragraph.content.joinToString(separator = "") { block(it) })
 
-        // Opaque embedded blocks (table, image, …) are handled in a follow-up.
-        is EmbedBlock -> ""
+        is EmbedBlock -> embed(paragraph)
 
         is ParagraphNone -> ""
+    }
+
+    // ── Embedded blocks ──────────────────────────────────────────────────────
+
+    /**
+     * An opaque embedded block. The editor keeps the original JSON subtree verbatim in
+     * [EmbedBlock.raw], so the known types are rendered from it. An unrecognised type is emitted as
+     * an empty element carrying its type and id rather than being dropped silently.
+     */
+    private fun embed(block: EmbedBlock): String = when (block.embedType) {
+        EmbedTypes.Table -> table(block.raw)
+        EmbedTypes.Image -> image(block.raw)
+        else -> tag(
+            name = "div",
+            body = "",
+            attributes = " data-type=\"${escapeAttribute(block.embedType)}\"" +
+                " data-id=\"${escapeAttribute(block.id)}\"",
+        )
+    }
+
+    private fun table(raw: JsonElement): String {
+        val rows = raw.childNodes().joinToString(separator = "") { row ->
+            tag("tr", row.childNodes().joinToString(separator = "") { cell(it) })
+        }
+        return tag("table", rows)
+    }
+
+    private fun cell(cell: JsonElement): String {
+        val name = if (cell.nodeType() == TABLE_HEADER_TYPE) "th" else "td"
+        val attrs = cell.jsonObject["attrs"]?.jsonObject
+        // colspan / rowspan default to 1; only emit them when they actually span.
+        val attributes = listOf("colspan", "rowspan")
+            .mapNotNull { key ->
+                val span = attrs?.get(key)?.jsonPrimitive?.intOrNull ?: DEFAULT_SPAN
+                if (span != DEFAULT_SPAN) " $key=\"$span\"" else null
+            }
+            .joinToString(separator = "")
+        return tag(name, cell.blockContent().joinToString(separator = "") { block(it) }, attributes)
+    }
+
+    private fun image(raw: JsonElement): String {
+        val attrs = raw.jsonObject["attrs"]?.jsonObject
+        val src = attrs?.get("src")?.jsonPrimitive?.contentOrNull.orEmpty()
+        val alt = attrs?.get("alt")?.jsonPrimitive?.contentOrNull.orEmpty()
+        return "<img src=\"${escapeAttribute(src)}\" alt=\"${escapeAttribute(alt)}\">"
+    }
+
+    /** The `"type"` of a raw embed node, or an empty string when absent. */
+    private fun JsonElement.nodeType(): String =
+        jsonObject["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+    /** The `"content"` of a raw embed node as a list of raw children. */
+    private fun JsonElement.childNodes(): List<JsonElement> =
+        (jsonObject["content"] as? JsonArray).orEmpty()
+
+    /**
+     * The `"content"` of a raw node decoded as document blocks, so a table cell's paragraphs go
+     * through the same [block] rendering as the rest of the document. Malformed content yields no
+     * blocks rather than failing the whole export.
+     */
+    private fun JsonElement.blockContent(): List<BaseParagraph> {
+        val content = jsonObject["content"] ?: return emptyList()
+        return runCatching {
+            TEXT_EDITOR_JSON.decodeFromJsonElement(ListSerializer(BaseParagraph.serializer()), content)
+        }.getOrDefault(emptyList())
     }
 
     /** A `<li>` of an ordered or bulleted list. Only [ListItem] carries block content. */
@@ -110,18 +184,25 @@ internal class HtmlSerializer : DocumentSerializer {
     private fun text(node: BaseText): String = when (node) {
         is Text -> wrapInMarks(escapeText(node.text), node.marks)
         is HardBreak -> "<br>"
-        // Tokens render as the label the user sees; identity attributes come in the follow-up.
-        is Mention -> wrapInMarks(
-            escapeText(MentionType.DEFAULT_MENTION_CHAR + node.attrs.label.orEmpty()),
-            node.marks,
-        )
-
-        is Hashtag -> wrapInMarks(
-            escapeText(HashtagType.DEFAULT_HASHTAG_CHAR + node.attrs.label.orEmpty()),
-            node.marks,
-        )
+        is Mention -> token(node, MentionType.DEFAULT_MENTION_CHAR)
+        is Hashtag -> token(node, HashtagType.DEFAULT_HASHTAG_CHAR)
         // List items are emitted by the list branches above, never as free inline content.
         is ListItem, is TaskListItem -> ""
+    }
+
+    /**
+     * An atomic inline token (mention, hashtag). The visible text is `<triggerChar><label>`; the
+     * node type and id ride on `data-*` attributes so the token's identity survives the export.
+     */
+    private fun token(node: InlineToken, triggerChar: Char): String {
+        val label = escapeText(triggerChar + node.attrs.label.orEmpty())
+        val body = tag(
+            name = "span",
+            body = label,
+            attributes = " data-type=\"${escapeAttribute(node.type)}\"" +
+                " data-id=\"${escapeAttribute(node.attrs.id)}\"",
+        )
+        return wrapInMarks(body, node.marks)
     }
 
     // ── Marks ────────────────────────────────────────────────────────────────
@@ -182,5 +263,7 @@ internal class HtmlSerializer : DocumentSerializer {
         const val DEFAULT_LIST_START = 1
         const val TASK_LIST_TYPE = "taskList"
         const val TASK_ITEM_TYPE = "taskItem"
+        const val TABLE_HEADER_TYPE = "tableHeader"
+        const val DEFAULT_SPAN = 1
     }
 }
