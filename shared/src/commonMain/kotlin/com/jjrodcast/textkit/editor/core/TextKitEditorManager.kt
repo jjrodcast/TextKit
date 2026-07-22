@@ -3,6 +3,7 @@ package com.jjrodcast.textkit.editor.core
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.history.EditorHistoryManager
 import com.jjrodcast.textkit.editor.core.history.HistorySnapshot
+import com.jjrodcast.textkit.editor.core.export.HtmlSerializer
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
 import com.jjrodcast.textkit.editor.core.parser.Mark
@@ -89,6 +90,12 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
     val text get() = transaction.text
 
     fun toJson() = transaction.json
+
+    /**
+     * Exports the current document as semantic HTML. Export only — the editor is still loaded from,
+     * and persisted as, the JSON produced by [toJson].
+     */
+    fun toHtml(): String = HtmlSerializer().serialize(transaction.document)
 
     val isViewer get() = transaction.isViewer
 
