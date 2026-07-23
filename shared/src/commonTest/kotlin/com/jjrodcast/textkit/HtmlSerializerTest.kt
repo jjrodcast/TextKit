@@ -1,5 +1,8 @@
 package com.jjrodcast.textkit
 
+import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.components.TextEditorListItem
+import com.jjrodcast.textkit.editor.components.TextEditorStyleItem
 import com.jjrodcast.textkit.editor.core.export.HtmlSerializer
 import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
 import com.jjrodcast.textkit.editor.core.parser.Blockquote
@@ -32,6 +35,7 @@ import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * HTML export.
@@ -498,5 +502,64 @@ class HtmlSerializerTest {
     @Test
     fun exports_an_empty_editor_as_an_empty_string() {
         assertEquals("", editorFrom("{}").toHtml())
+    }
+
+    // ── After editing in the editor ──────────────────────────────────────────
+    // toHtml() reads the live document, so exporting after edits must reflect them.
+
+    @Test
+    fun exports_text_typed_into_the_editor() {
+        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
+
+        editor.typeText(offset = 0, textToAdd = "Say: ")
+
+        assertEquals("<p>Say: Hello world</p>", editor.toHtml())
+    }
+
+    @Test
+    fun exports_a_mark_applied_in_the_editor() {
+        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
+
+        // Bold the word "Hello".
+        assertTrue(editor.applyStyle(TextRange(0, 5), TextEditorStyleItem.Bold))
+
+        assertEquals("<p><strong>Hello</strong> world</p>", editor.toHtml())
+    }
+
+    @Test
+    fun exports_a_link_added_in_the_editor() {
+        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
+
+        assertTrue(editor.setLink(editor.rangeOf("world"), "https://test.com"))
+
+        assertEquals(
+            "<p>Hello <a href=\"https://test.com\">world</a></p>",
+            editor.toHtml(),
+        )
+    }
+
+    @Test
+    fun exports_a_list_created_in_the_editor() {
+        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
+
+        assertTrue(
+            editor.toListItem(
+                TextRange(0, editor.offsetOf("world")),
+                from = TextEditorListItem.None,
+                to = TextEditorListItem.BulletedList,
+            ),
+        )
+
+        assertEquals("<ul><li><p>Hello world</p></li></ul>", editor.toHtml())
+    }
+
+    @Test
+    fun reflects_a_sequence_of_edits_in_the_export() {
+        val editor = editorFrom(SampleDocuments.SINGLE_PARAGRAPH)
+
+        editor.typeText(offset = editor.text.length, textToAdd = "!")
+        editor.applyStyle(TextRange(0, 5), TextEditorStyleItem.Italic)
+
+        assertEquals("<p><em>Hello</em> world!</p>", editor.toHtml())
     }
 }
