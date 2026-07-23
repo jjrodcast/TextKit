@@ -397,6 +397,81 @@ class HtmlSerializerTest {
         )
     }
 
+    // ── Sanitisation ─────────────────────────────────────────────────────────
+
+    @Test
+    fun keeps_safe_link_schemes() {
+        listOf(
+            "https://test.com",
+            "http://test.com",
+            "mailto:a@b.com",
+            "tel:+123",
+            "/relative/path",
+            "#anchor",
+        ).forEach { href ->
+            assertEquals(
+                "<p><a href=\"$href\">x</a></p>",
+                html(paragraphOf("x", setOf(LinkMark(LinkAttrs(href))))),
+                "href: $href",
+            )
+        }
+    }
+
+    @Test
+    fun drops_a_link_with_an_unsafe_scheme_but_keeps_the_text() {
+        listOf(
+            "javascript:alert(1)",
+            "JavaScript:alert(1)",
+            "data:text/html,<script>",
+            "vbscript:msgbox",
+        ).forEach { href ->
+            assertEquals(
+                "<p>click</p>",
+                html(paragraphOf("click", setOf(LinkMark(LinkAttrs(href))))),
+                "href: $href",
+            )
+        }
+    }
+
+    @Test
+    fun emits_a_valid_hex_colour_but_drops_anything_else() {
+        assertEquals(
+            "<p><span style=\"color:#ABC\">x</span></p>",
+            html(paragraphOf("x", setOf(TextStyleMark(TextStyleAttrs(color = "#ABC", fontSize = 0))))),
+        )
+        // An injection attempt through the colour is not a valid hex value, so it is dropped entirely.
+        assertEquals(
+            "<p>x</p>",
+            html(paragraphOf("x", setOf(TextStyleMark(TextStyleAttrs(color = "#fff;background:url(x)", fontSize = 0))))),
+        )
+        assertEquals(
+            "<p>x</p>",
+            html(paragraphOf("x", setOf(TextStyleMark(TextStyleAttrs(color = "red", fontSize = 0))))),
+        )
+    }
+
+    @Test
+    fun drops_a_non_positive_or_absurd_font_size() {
+        assertEquals(
+            "<p>x</p>",
+            html(paragraphOf("x", setOf(TextStyleMark(TextStyleAttrs(color = "", fontSize = -4))))),
+        )
+        assertEquals(
+            "<p>x</p>",
+            html(paragraphOf("x", setOf(TextStyleMark(TextStyleAttrs(color = "", fontSize = 100_000))))),
+        )
+    }
+
+    @Test
+    fun clamps_a_non_positive_ordered_list_start() {
+        val zeroStart = OrderedList(ListAttrs(start = 0), listOf(ListItem(listOf(paragraphOf("a")))))
+        val negativeStart = OrderedList(ListAttrs(start = -3), listOf(ListItem(listOf(paragraphOf("a")))))
+
+        // Clamped to 1, which is the default, so no start attribute is emitted (never `start="0"`).
+        assertEquals("<ol><li><p>a</p></li></ol>", html(zeroStart))
+        assertEquals("<ol><li><p>a</p></li></ol>", html(negativeStart))
+    }
+
     // ── End to end, through the editor ───────────────────────────────────────
 
     @Test
