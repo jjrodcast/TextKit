@@ -30,7 +30,6 @@ import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
-import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs.Companion.UNSET_FONT_SIZE
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
 import kotlinx.serialization.builtins.ListSerializer
@@ -53,8 +52,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * their identity in `data-*` attributes alongside the visible label.
  *
  * The document is user-supplied (loaded from JSON), so values that end up in an attribute the browser
- * *acts on* — a link `href`, a `textStyle` colour, an `<ol start>` — are validated, not just escaped:
- * only safe URL schemes ([SAFE_SCHEMES]) keep their link, only a valid hex colour is emitted, and
+ * *acts on* — a link `href`, a `textStyle` colour, an `<ol start>` — are validated, not just escaped
+ * (see [ExportHtml]): only safe URL schemes keep their link, only a valid hex colour is emitted, and
  * `start` is clamped. This keeps the exported markup safe to inject into a DOM/WebView.
  */
 internal class HtmlSerializer : DocumentSerializer {
@@ -108,8 +107,8 @@ internal class HtmlSerializer : DocumentSerializer {
         else -> tag(
             name = Tag.Div,
             body = "",
-            attributes = attr(Attr.DataType, escapeAttribute(block.embedType)) +
-                attr(Attr.DataId, escapeAttribute(block.id)),
+            attributes = attr(Attr.DataType, ExportHtml.escapeAttribute(block.embedType)) +
+                attr(Attr.DataId, ExportHtml.escapeAttribute(block.id)),
         )
     }
 
@@ -137,7 +136,7 @@ internal class HtmlSerializer : DocumentSerializer {
         val attrs = raw.jsonObject["attrs"]?.jsonObject
         val src = attrs?.get(Attr.Src)?.jsonPrimitive?.contentOrNull.orEmpty()
         val alt = attrs?.get(Attr.Alt)?.jsonPrimitive?.contentOrNull.orEmpty()
-        return "<${Tag.Image}${attr(Attr.Src, escapeAttribute(src))}${attr(Attr.Alt, escapeAttribute(alt))}>"
+        return "<${Tag.Image}${attr(Attr.Src, ExportHtml.escapeAttribute(src))}${attr(Attr.Alt, ExportHtml.escapeAttribute(alt))}>"
     }
 
     /** The `"type"` of a raw embed node, or an empty string when absent. */
@@ -188,7 +187,7 @@ internal class HtmlSerializer : DocumentSerializer {
         content.joinToString(separator = "") { text(it) }
 
     private fun text(node: BaseText): String = when (node) {
-        is Text -> wrapInMarks(escapeText(node.text), node.marks)
+        is Text -> wrapInMarks(ExportHtml.escapeText(node.text), node.marks)
         is HardBreak -> "<${Tag.LineBreak}>"
         is Mention -> token(node, MentionType.DEFAULT_MENTION_CHAR)
         is Hashtag -> token(node, HashtagType.DEFAULT_HASHTAG_CHAR)
@@ -201,12 +200,12 @@ internal class HtmlSerializer : DocumentSerializer {
      * node type and id ride on `data-*` attributes so the token's identity survives the export.
      */
     private fun token(node: InlineToken, triggerChar: Char): String {
-        val label = escapeText(triggerChar + node.attrs.label.orEmpty())
+        val label = ExportHtml.escapeText(triggerChar + node.attrs.label.orEmpty())
         val body = tag(
             name = Tag.Span,
             body = label,
-            attributes = attr(Attr.DataType, escapeAttribute(node.type)) +
-                attr(Attr.DataId, escapeAttribute(node.attrs.id)),
+            attributes = attr(Attr.DataType, ExportHtml.escapeAttribute(node.type)) +
+                attr(Attr.DataId, ExportHtml.escapeAttribute(node.attrs.id)),
         )
         return wrapInMarks(body, node.marks)
     }
@@ -223,11 +222,11 @@ internal class HtmlSerializer : DocumentSerializer {
     private fun wrapInMark(body: String, mark: Mark): String = when (mark) {
         // An unsafe or non-http(s)/mailto/tel scheme drops the link but keeps the text, so a
         // `javascript:`/`data:` href can never reach a consumer's DOM.
-        is LinkMark -> safeHref(mark.attrs.href)
-            ?.let { tag(Tag.Anchor, body, attr(Attr.Href, escapeAttribute(it))) }
+        is LinkMark -> ExportHtml.safeHref(mark.attrs.href)
+            ?.let { tag(Tag.Anchor, body, attr(Attr.Href, ExportHtml.escapeAttribute(it))) }
             ?: body
 
-        is TextStyleMark -> styleOf(mark)?.let { tag(Tag.Span, body, attr(Attr.Style, it)) } ?: body
+        is TextStyleMark -> ExportHtml.textStyleCss(mark)?.let { tag(Tag.Span, body, attr(Attr.Style, it)) } ?: body
         is BoldMark -> tag(Tag.Bold, body)
         is ItalicMark -> tag(Tag.Italic, body)
         is UnderlineMark -> tag(Tag.Underline, body)
@@ -248,50 +247,6 @@ internal class HtmlSerializer : DocumentSerializer {
         is None -> 7
     }
 
-    /**
-     * The CSS for a `textStyle` mark, or `null` when nothing valid is left to emit. The colour is
-     * only emitted when it is a valid hex value ([HEX_COLOR]) and the font size only when it is a
-     * sane positive number — otherwise that declaration is dropped, so nothing user-supplied can
-     * inject extra CSS through the `style` attribute.
-     */
-    private fun styleOf(mark: TextStyleMark): String? {
-        val declarations = buildList {
-            mark.attrs.color?.let(::safeColor)?.let { add("${Css.Color}:$it") }
-            mark.attrs.fontSize
-                .takeIf { it != UNSET_FONT_SIZE && it in MIN_FONT_SIZE..MAX_FONT_SIZE }
-                ?.let { add("${Css.FontSize}:${it}px") }
-        }
-        return declarations.takeIf { it.isNotEmpty() }?.joinToString(separator = ";")
-    }
-
-    // ── Sanitisation ─────────────────────────────────────────────────────────
-
-    /** Returns [href] when its scheme is safe (or it is a relative URL), otherwise `null`. */
-    private fun safeHref(href: String): String? {
-        val trimmed = href.trim()
-        if (trimmed.isEmpty()) return null
-        val scheme = schemeOf(trimmed) ?: return trimmed // no scheme → relative URL, safe
-        return trimmed.takeIf { scheme in SAFE_SCHEMES }
-    }
-
-    /**
-     * The lower-cased URL scheme of [url] (e.g. `"https"`), or `null` when it has none. A scheme is
-     * the run of letters/digits/`+`/`.`/`-` before the first `:`, and only when no `/`, `?` or `#`
-     * appears first (those mean the `:` belongs to a path/query/fragment, i.e. a relative URL).
-     */
-    private fun schemeOf(url: String): String? {
-        val colon = url.indexOf(':')
-        if (colon <= 0) return null
-        val prefix = url.substring(0, colon)
-        if (prefix.any { it == '/' || it == '?' || it == '#' }) return null
-        if (!prefix.first().isLetter()) return null
-        if (!prefix.all { it.isLetterOrDigit() || it == '+' || it == '.' || it == '-' }) return null
-        return prefix.lowercase()
-    }
-
-    /** Returns [color] when it is a valid `#rgb` / `#rgba` / `#rrggbb` / `#rrggbbaa` hex value. */
-    private fun safeColor(color: String): String? = color.trim().takeIf { HEX_COLOR.matches(it) }
-
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun tag(name: String, body: String, attributes: String = "") =
@@ -299,14 +254,6 @@ internal class HtmlSerializer : DocumentSerializer {
 
     /** Renders one attribute, e.g. `attr("href", "x")` → ` href="x"`. Escape user values first. */
     private fun attr(name: String, value: String) = " $name=\"$value\""
-
-    /** Escapes text content. `&` must be replaced first so the other entities are not double-escaped. */
-    private fun escapeText(value: String): String = value
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-
-    private fun escapeAttribute(value: String): String = escapeText(value).replace("\"", "&quot;")
 
     /** HTML element names. */
     private object Tag {
@@ -349,12 +296,6 @@ internal class HtmlSerializer : DocumentSerializer {
         const val Checked = "checked"
     }
 
-    /** CSS property names used in the `style` attribute. */
-    private object Css {
-        const val Color = "color"
-        const val FontSize = "font-size"
-    }
-
     private companion object {
         const val DEFAULT_LIST_START = 1
         const val MIN_LIST_START = 1
@@ -363,13 +304,5 @@ internal class HtmlSerializer : DocumentSerializer {
         const val TABLE_HEADER_TYPE = "tableHeader"
         const val CHECKBOX_INPUT_TYPE = "checkbox"
         const val DEFAULT_SPAN = 1
-        const val MIN_FONT_SIZE = 1
-        const val MAX_FONT_SIZE = 512
-
-        /** URL schemes safe to keep on an exported link; anything else drops the link. */
-        val SAFE_SCHEMES = setOf("http", "https", "mailto", "tel")
-
-        /** `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa`. */
-        val HEX_COLOR = Regex("^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
     }
 }
