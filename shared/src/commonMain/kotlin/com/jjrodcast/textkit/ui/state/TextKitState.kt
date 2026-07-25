@@ -409,6 +409,12 @@ class TextKitState(
     fun toHtml() = manager.toHtml()
 
     /**
+     * Exports the current document as GitHub Flavored Markdown. Export only and lossy — see
+     * [TextKitEditorManager.toMarkdown]. [toJson] remains the lossless format.
+     */
+    fun toMarkdown() = manager.toMarkdown()
+
+    /**
      * Receives the editor's latest [TextLayoutResult]; wire it to the text field's `onTextLayout`.
      * It backs coordinate-based lookups such as link hit-testing and [linkBoundingBox], so those
      * return nothing until the first layout pass has run.

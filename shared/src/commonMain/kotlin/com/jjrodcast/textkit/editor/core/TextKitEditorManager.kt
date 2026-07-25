@@ -4,6 +4,7 @@ import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.history.EditorHistoryManager
 import com.jjrodcast.textkit.editor.core.history.HistorySnapshot
 import com.jjrodcast.textkit.editor.core.export.HtmlSerializer
+import com.jjrodcast.textkit.editor.core.export.MarkdownSerializer
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
 import com.jjrodcast.textkit.editor.core.parser.Mark
@@ -97,6 +98,13 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
      * and persisted as, the JSON produced by [toJson].
      */
     fun toHtml(): String = HtmlSerializer().serialize(transaction.document)
+
+    /**
+     * Exports the current document as GitHub Flavored Markdown. Export only, and lossy — marks and
+     * blocks Markdown cannot express are dropped to plain text or inline HTML; [toJson] stays the
+     * lossless format.
+     */
+    fun toMarkdown(): String = MarkdownSerializer().serialize(transaction.document)
 
     val isViewer get() = transaction.isViewer
 
