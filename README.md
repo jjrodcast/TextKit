@@ -108,6 +108,9 @@ val json: String = state.toJson()
 
 // The same document as HTML — use this to export/share:
 val html: String = state.toHtml()
+
+// …or as GitHub Flavored Markdown:
+val markdown: String = state.toMarkdown()
 ```
 
 `toJson()` is lossless: marks, lists, links and inline tokens (mentions, hashtags) are all preserved.
@@ -123,6 +126,19 @@ exported markup stays interactive, and inline tokens carry their identity on `da
 <ul data-type="taskList">
   <li data-type="taskItem" data-checked="true"><input type="checkbox" checked><p>done</p></li>
 </ul>
+```
+
+`toMarkdown()` is **export only** too, and targets **GitHub Flavored Markdown** — task lists, tables
+and `~~strikethrough~~` are all native. It is deliberately **lossy**: marks GFM has no syntax for
+(underline, highlight, a colour/size text style) fall back to inline HTML (`<u>`, `<mark>`,
+`<span style="…">`), inline tokens become plain `@label` / `#label` text (their `data-id` identity is
+dropped), and a blank paragraph has no Markdown form. Keep `toJson()` for a lossless round-trip;
+reach for `toMarkdown()` when sharing to a Markdown surface (READMEs, chat, notes).
+
+```markdown
+Hi @ada
+
+- [x] done
 ```
 
 ## Inline styling
