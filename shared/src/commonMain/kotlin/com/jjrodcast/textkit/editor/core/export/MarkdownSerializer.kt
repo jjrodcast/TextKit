@@ -29,6 +29,7 @@ import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
+import com.jjrodcast.textkit.editor.core.parser.TextAlign
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
@@ -66,11 +67,16 @@ internal class MarkdownSerializer : DocumentSerializer {
     // ── Blocks ───────────────────────────────────────────────────────────────
 
     private fun block(paragraph: BaseParagraph): String = when (paragraph) {
-        is Paragraph -> inline(paragraph.content)
+        is Paragraph -> {
+            val body = inline(paragraph.content)
+            aligned(body, Html.Paragraph, paragraph.attrs.textAlign) ?: body
+        }
 
         is Heading -> {
             val level = paragraph.attrs.level.coerceIn(HeadingLevels.H1, HeadingLevels.H6)
-            "${Md.Heading.repeat(level)} ${inline(paragraph.content)}"
+            val body = inline(paragraph.content)
+            aligned(body, "${Html.Heading}$level", paragraph.attrs.textAlign)
+                ?: "${Md.Heading.repeat(level)} $body"
         }
 
         is BulletedList -> paragraph.content.joinToString(separator = "\n") { listRow(Md.Bullet, it) }
@@ -123,7 +129,8 @@ internal class MarkdownSerializer : DocumentSerializer {
      */
     private fun itemBody(blocks: List<BaseParagraph>): String {
         val first = blocks.firstOrNull()
-        val lead = (first as? Paragraph)?.let { inline(it.content) } ?: ""
+        // block() (not inline()) so an aligned lead paragraph still emits its HTML wrapper.
+        val lead = (first as? Paragraph)?.let { block(it) } ?: ""
         val rest = if (first is Paragraph) blocks.drop(1) else blocks
         val builder = StringBuilder(lead)
         rest.forEach { child ->
@@ -267,6 +274,15 @@ internal class MarkdownSerializer : DocumentSerializer {
 
     private fun htmlTag(name: String, body: String): String = "<$name>$body</$name>"
 
+    /**
+     * Wraps [body] in an aligned inline-HTML block ([tag]) when [align] is non-default; returns `null`
+     * for the default [TextAlign.Left] so the caller keeps the plain Markdown form. GFM has no
+     * paragraph alignment, so this HTML passthrough is the only way to carry it — the same fallback
+     * strategy the marks use.
+     */
+    private fun aligned(body: String, tag: String, align: TextAlign): String? =
+        ExportHtml.textAlignCss(align)?.let { "<$tag${htmlAttr(Html.Style, it)}>$body</$tag>" }
+
     /** One inline-HTML attribute, e.g. ` style="color:#fff"`, with the value attribute-escaped. */
     private fun htmlAttr(name: String, value: String): String = " $name=\"${ExportHtml.escapeAttribute(value)}\""
 
@@ -317,8 +333,10 @@ internal class MarkdownSerializer : DocumentSerializer {
         const val TableDelimiter = "---"
     }
 
-    /** Inline-HTML tag and attribute names used for the marks GFM cannot express. */
+    /** Inline-HTML tag and attribute names used for the marks and alignment GFM cannot express. */
     private object Html {
+        const val Paragraph = "p"
+        const val Heading = "h" // suffixed with the level, e.g. "h1"
         const val Underline = "u"
         const val Highlight = "mark"
         const val Span = "span"

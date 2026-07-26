@@ -20,11 +20,13 @@ import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.Mention
 import com.jjrodcast.textkit.editor.core.parser.OrderedList
 import com.jjrodcast.textkit.editor.core.parser.Paragraph
+import com.jjrodcast.textkit.editor.core.parser.ParagraphAttrs
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListAttrs
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
+import com.jjrodcast.textkit.editor.core.parser.TextAlign
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
@@ -162,6 +164,58 @@ class MarkdownSerializerTest {
         assertEquals(
             "- A\n\n    B",
             md(BulletedList(listOf(ListItem(listOf(paragraphOf("A"), paragraphOf("B")))))),
+        )
+    }
+
+    // ── Alignment ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun falls_back_to_html_for_paragraph_alignment() {
+        // GFM has no paragraph alignment, so it rides an inline-HTML block — same as the HTML export.
+        assertEquals(
+            "<p style=\"text-align:center\">centered</p>",
+            md(Paragraph(ParagraphAttrs(TextAlign.Center), listOf(Text("centered")))),
+        )
+        assertEquals(
+            "<p style=\"text-align:right\">right</p>",
+            md(Paragraph(ParagraphAttrs(TextAlign.Right), listOf(Text("right")))),
+        )
+        assertEquals(
+            "<p style=\"text-align:justify\">justified</p>",
+            md(Paragraph(ParagraphAttrs(TextAlign.Justify), listOf(Text("justified")))),
+        )
+    }
+
+    @Test
+    fun keeps_the_plain_markdown_form_for_the_default_alignment() {
+        assertEquals("plain", md(Paragraph(ParagraphAttrs(TextAlign.Left), listOf(Text("plain")))))
+    }
+
+    @Test
+    fun falls_back_to_html_for_heading_alignment() {
+        assertEquals(
+            "<h1 style=\"text-align:center\">Title</h1>",
+            md(Heading(HeadingAttrs(level = 1, textAlign = TextAlign.Center), listOf(Text("Title")))),
+        )
+    }
+
+    @Test
+    fun keeps_the_hash_form_for_a_default_aligned_heading() {
+        assertEquals(
+            "# Title",
+            md(Heading(HeadingAttrs(level = 1, textAlign = TextAlign.Left), listOf(Text("Title")))),
+        )
+    }
+
+    @Test
+    fun emits_alignment_on_a_list_item_paragraph() {
+        assertEquals(
+            "- <p style=\"text-align:right\">x</p>",
+            md(
+                BulletedList(
+                    listOf(ListItem(listOf(Paragraph(ParagraphAttrs(TextAlign.Right), listOf(Text("x")))))),
+                ),
+            ),
         )
     }
 
