@@ -118,8 +118,9 @@ val markdown: String = state.toMarkdown()
 `toHtml()` is **export only** — the editor is still loaded from, and persisted as, the JSON produced
 by `toJson()`. It emits semantic markup (`<strong>`, `<em>`, `<blockquote>`, …) rather than inline
 styles; the one exception is a text style (colour + font size), which has no semantic equivalent and
-becomes a `<span style="…">`. Task items keep a real, enabled `<input type="checkbox">` so the
-exported markup stays interactive, and inline tokens carry their identity on `data-type` / `data-id`:
+becomes a `<span style="…">`. Paragraph alignment is emitted as `style="text-align:…"` on the block
+(only when it is not the default `left`). Task items keep a real, enabled `<input type="checkbox">` so
+the exported markup stays interactive, and inline tokens carry their identity on `data-type` / `data-id`:
 
 ```html
 <p>Hi <span data-type="mention" data-id="42">@ada</span></p>
@@ -130,9 +131,10 @@ exported markup stays interactive, and inline tokens carry their identity on `da
 
 `toMarkdown()` is **export only** too, and targets **GitHub Flavored Markdown** — task lists, tables
 and `~~strikethrough~~` are all native. It is deliberately **lossy**: marks GFM has no syntax for
-(underline, highlight, a colour/size text style) fall back to inline HTML (`<u>`, `<mark>`,
-`<span style="…">`), inline tokens become plain `@label` / `#label` text (their `data-id` identity is
-dropped), and a blank paragraph has no Markdown form. Keep `toJson()` for a lossless round-trip;
+(underline, highlight, a colour/size text style, paragraph alignment) fall back to inline HTML (`<u>`,
+`<mark>`, `<span style="…">`, `<p style="text-align:…">`), inline tokens become plain `@label` /
+`#label` text (their `data-id` identity is dropped), and a blank paragraph has no Markdown form. Keep
+`toJson()` for a lossless round-trip;
 reach for `toMarkdown()` when sharing to a Markdown surface (READMEs, chat, notes).
 
 ```markdown
