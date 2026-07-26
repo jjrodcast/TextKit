@@ -143,7 +143,7 @@ class MarkdownSerializerTest {
     }
 
     @Test
-    fun nests_a_sublist_under_its_item() {
+    fun nests_a_sublist_tightly_under_its_item() {
         assertEquals(
             "- A\n    - B",
             md(
@@ -153,6 +153,15 @@ class MarkdownSerializerTest {
                     ),
                 ),
             ),
+        )
+    }
+
+    @Test
+    fun separates_a_second_paragraph_in_an_item_with_a_blank_line() {
+        // Without the blank line a Markdown renderer merges the two paragraphs into one.
+        assertEquals(
+            "- A\n\n    B",
+            md(BulletedList(listOf(ListItem(listOf(paragraphOf("A"), paragraphOf("B")))))),
         )
     }
 
