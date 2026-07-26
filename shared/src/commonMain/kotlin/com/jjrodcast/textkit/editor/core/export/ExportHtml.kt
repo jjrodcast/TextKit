@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.export
 
+import com.jjrodcast.textkit.editor.core.parser.TextAlign
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs.Companion.UNSET_FONT_SIZE
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 
@@ -65,8 +66,21 @@ internal object ExportHtml {
         return prefix.lowercase()
     }
 
+    /**
+     * The `text-align` CSS for a block's alignment, or `null` for the default [TextAlign.Left] (which
+     * is never emitted — an unaligned block stays bare). The enum values are the CSS keywords, so both
+     * exporters render the same `text-align:<value>`.
+     */
+    fun textAlignCss(align: TextAlign): String? = when (align) {
+        TextAlign.Left -> null
+        TextAlign.Center -> "$TEXT_ALIGN:center"
+        TextAlign.Right -> "$TEXT_ALIGN:right"
+        TextAlign.Justify -> "$TEXT_ALIGN:justify"
+    }
+
     const val COLOR = "color"
     const val FONT_SIZE = "font-size"
+    const val TEXT_ALIGN = "text-align"
 
     private const val MIN_FONT_SIZE = 1
     private const val MAX_FONT_SIZE = 512

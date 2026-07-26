@@ -29,6 +29,7 @@ import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
+import com.jjrodcast.textkit.editor.core.parser.TextAlign
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
@@ -64,11 +65,11 @@ internal class HtmlSerializer : DocumentSerializer {
     // ── Blocks ───────────────────────────────────────────────────────────────
 
     private fun block(paragraph: BaseParagraph): String = when (paragraph) {
-        is Paragraph -> tag(Tag.Paragraph, inline(paragraph.content))
+        is Paragraph -> tag(Tag.Paragraph, inline(paragraph.content), alignment(paragraph.attrs.textAlign))
 
         is Heading -> {
             val level = paragraph.attrs.level.coerceIn(HeadingLevels.H1, HeadingLevels.H6)
-            tag("${Tag.Heading}$level", inline(paragraph.content))
+            tag("${Tag.Heading}$level", inline(paragraph.content), alignment(paragraph.attrs.textAlign))
         }
 
         is BulletedList -> tag(Tag.UnorderedList, paragraph.content.joinToString(separator = "") { listItem(it) })
@@ -254,6 +255,10 @@ internal class HtmlSerializer : DocumentSerializer {
 
     /** Renders one attribute, e.g. `attr("href", "x")` → ` href="x"`. Escape user values first. */
     private fun attr(name: String, value: String) = " $name=\"$value\""
+
+    /** A `style="text-align:…"` attribute for a non-default block alignment, or `""` for the default. */
+    private fun alignment(align: TextAlign): String =
+        ExportHtml.textAlignCss(align)?.let { attr(Attr.Style, it) } ?: ""
 
     /** HTML element names. */
     private object Tag {

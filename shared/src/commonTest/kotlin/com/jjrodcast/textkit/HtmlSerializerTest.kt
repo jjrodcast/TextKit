@@ -22,11 +22,13 @@ import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.Mention
 import com.jjrodcast.textkit.editor.core.parser.OrderedList
 import com.jjrodcast.textkit.editor.core.parser.Paragraph
+import com.jjrodcast.textkit.editor.core.parser.ParagraphAttrs
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListAttrs
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
+import com.jjrodcast.textkit.editor.core.parser.TextAlign
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
@@ -100,6 +102,50 @@ class HtmlSerializerTest {
             html(
                 Heading(HeadingAttrs(level = 9), listOf(Text("too deep"))),
                 Heading(HeadingAttrs(level = 0), listOf(Text("too shallow"))),
+            ),
+        )
+    }
+
+    @Test
+    fun exports_paragraph_alignment_as_a_text_align_style() {
+        assertEquals(
+            "<p style=\"text-align:center\">centered</p>",
+            html(Paragraph(ParagraphAttrs(TextAlign.Center), listOf(Text("centered")))),
+        )
+        assertEquals(
+            "<p style=\"text-align:right\">right</p>",
+            html(Paragraph(ParagraphAttrs(TextAlign.Right), listOf(Text("right")))),
+        )
+        assertEquals(
+            "<p style=\"text-align:justify\">justified</p>",
+            html(Paragraph(ParagraphAttrs(TextAlign.Justify), listOf(Text("justified")))),
+        )
+    }
+
+    @Test
+    fun omits_the_style_for_the_default_left_alignment() {
+        assertEquals(
+            "<p>plain</p>",
+            html(Paragraph(ParagraphAttrs(TextAlign.Left), listOf(Text("plain")))),
+        )
+    }
+
+    @Test
+    fun exports_heading_alignment() {
+        assertEquals(
+            "<h2 style=\"text-align:center\">Title</h2>",
+            html(Heading(HeadingAttrs(level = 2, textAlign = TextAlign.Center), listOf(Text("Title")))),
+        )
+    }
+
+    @Test
+    fun exports_alignment_on_a_list_item_paragraph() {
+        assertEquals(
+            "<ul><li><p style=\"text-align:right\">x</p></li></ul>",
+            html(
+                BulletedList(
+                    listOf(ListItem(listOf(Paragraph(ParagraphAttrs(TextAlign.Right), listOf(Text("x")))))),
+                ),
             ),
         )
     }
