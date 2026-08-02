@@ -150,14 +150,19 @@ internal class TextKitTokenState(
      * Bounding box (text-field local coordinates) of the active trigger char, used to anchor the
      * popup. Null when no token is being composed or the [layout] is not ready.
      */
-    fun anchorBounds(layout: TextLayoutResult?): Rect? {
+    fun anchorBounds(
+        layout: TextLayoutResult?,
+        originalToTransformed: (Int) -> Int,
+    ): Rect? {
         if (anchor < 0 || layout == null) return null
+        // [anchor] is a field (piece-table) offset; layout text is the transformed display string.
+        val displayAnchor = originalToTransformed(anchor)
         // getBoundingBox needs a valid character index in [0, length). When the trigger char was just
         // typed at the very end of the document the layout is momentarily one frame behind (its text
         // is still the pre-insert, shorter string), so anchor can equal its length — skip this frame
         // instead of crashing; recomposition re-runs anchorBounds once the updated layout arrives.
-        if (anchor >= layout.layoutInput.text.length) return null
-        return layout.getBoundingBox(anchor)
+        if (displayAnchor >= layout.layoutInput.text.length) return null
+        return layout.getBoundingBox(displayAnchor)
     }
 
     /**

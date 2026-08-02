@@ -171,7 +171,7 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
         color: String?
     ): Pair<Boolean, TextRange> {
         val prevFormatMarks =
-            transaction.getMarksWithType(selection.start, selection.end, configuration)
+            transaction.getMarksWithType(selection.min, selection.max, configuration)
 
         // Keep the current font size and only change the color. Removing the color (color == null)
         // falls back to the configured default color instead of dropping the text-style mark.

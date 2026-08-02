@@ -428,4 +428,49 @@ class ListItemUiTest {
             "Z must appear before the original second item text"
         )
     }
+
+    @Test
+    fun complexJsonV1_offsetMappingIsMonotonicAcrossFieldText() {
+        val state = stateWith(DocumentUtils.complexJsonV1)
+        val fieldText = state.textFieldValue.text
+        val transformed = state.visualTransformation.filter(AnnotatedString(fieldText))
+        val mapping = transformed.offsetMapping
+        assertTrue(transformed.text.length < fieldText.length)
+
+        var prevDisplay = -1
+        for (fieldOffset in 0..fieldText.length) {
+            val display = mapping.originalToTransformed(fieldOffset)
+            assertTrue(display in 0..transformed.text.length)
+            assertTrue(display >= prevDisplay, "field $fieldOffset mapped to non-monotonic display")
+            prevDisplay = display
+        }
+    }
+
+    @Test
+    fun complexJsonV1_rangeSelectionThroughListItemsDoesNotThrow() {
+        val state = stateWith(DocumentUtils.complexJsonV1)
+        val len = state.textFieldValue.text.length
+        val mid = len / 2
+
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(0, len)))
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(len, mid)))
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(mid, len)))
+
+        assertTrue(state.textFieldValue.selection.length > 0)
+    }
+
+    @Test
+    fun complexJsonV1_deleteBackwardSelectionOverListsDoesNotThrow() {
+        val state = stateWith(DocumentUtils.complexJsonV1)
+        val before = state.textFieldValue.text
+        val len = before.length
+        val mid = len / 2
+        val afterDelete = before.removeRange(mid, len)
+
+        state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(len, mid)))
+        state.onTextFieldChange(TextFieldValue(text = afterDelete, selection = TextRange(mid)))
+
+        assertEquals(afterDelete, state.textFieldValue.text)
+        assertEquals(TextRange(mid), state.textFieldValue.selection)
+    }
 }

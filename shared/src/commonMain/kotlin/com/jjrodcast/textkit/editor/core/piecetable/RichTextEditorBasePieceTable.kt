@@ -121,7 +121,9 @@ internal abstract class RichTextEditorBasePieceTable :
      * identify them just by checking the [PieceParagraph.outOfRange] property.
      */
     override fun getLineContent(start: Int, end: Int): MultiPieceParagraph {
-        return MultiPieceParagraph(findFastPiecesMultiLine(start, end), start, end)
+        val rangeStart = minOf(start, end)
+        val rangeEnd = maxOf(start, end)
+        return MultiPieceParagraph(findFastPiecesMultiLine(rangeStart, rangeEnd), rangeStart, rangeEnd)
     }
 
     /**
@@ -148,15 +150,17 @@ internal abstract class RichTextEditorBasePieceTable :
      * [PieceParagraph.outOfRange] == `true`.
      */
     override fun getLineContentWithNeighborListItems(start: Int, end: Int): MultiPieceParagraph {
-        val newStart = start.coerceAtLeast(0)
-        val newEnd = end.coerceAtMost(rope.totalLength)
+        val rangeStart = minOf(start, end)
+        val rangeEnd = maxOf(start, end)
+        val newStart = rangeStart.coerceAtLeast(0)
+        val newEnd = rangeEnd.coerceAtMost(rope.totalLength)
         // Two fused O(log P) walks (findParagraphStartAt / findParagraphEndAt) replace the
         // previous 4 separate walks (2× findByDocumentOffset + 2× paragraph-boundary search).
         val newStartPieceIndex = rope.findParagraphStartAt(newStart)
         val newEndPieceIndex = rope.findParagraphEndAt(newEnd)
 
         val paragraphs =
-            ArrayDeque(findFastPiecesMultiLine(start, end, newStartPieceIndex, newEndPieceIndex))
+            ArrayDeque(findFastPiecesMultiLine(rangeStart, rangeEnd, newStartPieceIndex, newEndPieceIndex))
 
         // Doc offsets read from the already-built models — O(1), no extra rope walk.
         val previousOffset = paragraphs.first().startOffset
@@ -177,7 +181,7 @@ internal abstract class RichTextEditorBasePieceTable :
             }
         }
 
-        return MultiPieceParagraph(paragraphs, start, end)
+        return MultiPieceParagraph(paragraphs, rangeStart, rangeEnd)
     }
 
     /**

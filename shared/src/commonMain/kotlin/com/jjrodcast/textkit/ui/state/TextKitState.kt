@@ -324,16 +324,33 @@ class TextKitState(
      * the caret to the list item the user clicked or arrowed onto.
      */
     private fun normalizeSelectionForListLayout(selection: TextRange): TextRange {
-        if (!selection.collapsed || !editorSegmentsNeedOffsetMapping(editorSegments)) return selection
-        val fieldOffset = selection.start.coerceIn(0, textFieldValue.text.length)
-        val displayOffset = editorOffsetMapping.originalToTransformed(fieldOffset)
-        val resolved = resolveParagraphCaretFieldOffset(
-            rawOffset = fieldOffset,
-            segments = editorSegments,
-            textLength = textFieldValue.text.length,
-            displayOffset = displayOffset,
+        if (!editorSegmentsNeedOffsetMapping(editorSegments)) return selection
+        val textLength = textFieldValue.text.length
+
+        fun roundTripFieldOffset(fieldOffset: Int): Int {
+            val field = fieldOffset.coerceIn(0, textLength)
+            val display = editorOffsetMapping.originalToTransformed(field)
+            return editorOffsetMapping.transformedToOriginal(display).coerceIn(0, textLength)
+        }
+
+        if (selection.collapsed) {
+            val fieldOffset = roundTripFieldOffset(selection.start)
+            val displayOffset = editorOffsetMapping.originalToTransformed(fieldOffset)
+            val resolved = resolveParagraphCaretFieldOffset(
+                rawOffset = fieldOffset,
+                segments = editorSegments,
+                textLength = textLength,
+                displayOffset = displayOffset,
+            )
+            return TextRange(resolved)
+        }
+
+        // Range selections must snap through display space so Compose never applies field offsets
+        // (which include list gutters) to the shorter transformed layout text.
+        return TextRange(
+            roundTripFieldOffset(selection.start),
+            roundTripFieldOffset(selection.end),
         )
-        return TextRange(resolved)
     }
 
     /**
@@ -1118,7 +1135,7 @@ class TextKitState(
                     textFieldValue = textFieldValue.copy(selection = snapped)
                 }
                 readSelectionContext()
-                checkDecorator(textFieldValue.selection.start, textFieldValue.selection.end)
+                checkDecorator(textFieldValue.selection.min, textFieldValue.selection.max)
                 tokenState.refreshQuery(textFieldValue.text, selection)
             } else {
                 // Replacing the same length of characters using the clipboard
@@ -1197,7 +1214,8 @@ class TextKitState(
      * Bounding box (in the text field's local coordinates) of the active trigger char, used to
      * anchor the popup. Null when no token is being composed or the layout is not ready.
      */
-    fun tokenAnchorBounds(): Rect? = tokenState.anchorBounds(textLayoutResult)
+    fun tokenAnchorBounds(): Rect? =
+        tokenState.anchorBounds(textLayoutResult) { editorOffsetMapping.originalToTransformed(it) }
 
     /** Backward-compatible alias of [dismissToken]. */
     fun dismissMention() = dismissToken()
@@ -1444,13 +1462,15 @@ class TextKitState(
             }
 
             isUsingClipboard -> {
+                val (offset, replacement) = replacementOverPriorSelection(
+                    priorText = textFieldValue.text,
+                    priorSelection = textFieldValue.selection,
+                    updatedText = prevTextFieldValue.text,
+                )
                 TextEditorAction.TextUpdated(
                     removeLength = textFieldValue.selection.length,
-                    text = prevTextFieldValue.text.substring(
-                        textFieldValue.selection.start,
-                        prevTextFieldValue.selection.end
-                    ),
-                    offset = textFieldValue.selection.start,
+                    text = replacement,
+                    offset = offset,
                     selection = prevTextFieldValue.selection
                 )
             }
@@ -1479,13 +1499,15 @@ class TextKitState(
             }
 
             isUsingClipboard -> {
+                val (offset, replacement) = replacementOverPriorSelection(
+                    priorText = textFieldValue.text,
+                    priorSelection = textFieldValue.selection,
+                    updatedText = prevTextFieldValue.text,
+                )
                 TextEditorAction.TextUpdated(
                     removeLength = textFieldValue.selection.length,
-                    text = prevTextFieldValue.text.substring(
-                        textFieldValue.selection.start,
-                        prevTextFieldValue.selection.end
-                    ),
-                    offset = textFieldValue.selection.start,
+                    text = replacement,
+                    offset = offset,
                     selection = prevTextFieldValue.selection
                 )
             }
@@ -1496,6 +1518,24 @@ class TextKitState(
                 selection = textFieldValue.selection
             )
         }
+    }
+
+    /**
+     * Text inserted when [updatedText] replaces the prior [priorSelection] in [priorText].
+     * Uses [priorSelection.min]/[priorSelection.max] so backward selections (start > end) are safe.
+     */
+    private fun replacementOverPriorSelection(
+        priorText: String,
+        priorSelection: TextRange,
+        updatedText: String,
+    ): Pair<Int, String> {
+        val removeStart = priorSelection.min.coerceIn(0, priorText.length)
+        val removeEnd = priorSelection.max.coerceIn(removeStart, priorText.length)
+        val removeLength = removeEnd - removeStart
+        val insertedLength = updatedText.length - priorText.length + removeLength
+        if (insertedLength <= 0) return removeStart to ""
+        val insertEnd = (removeStart + insertedLength).coerceIn(removeStart, updatedText.length)
+        return removeStart to updatedText.substring(removeStart, insertEnd)
     }
 
     companion object {
