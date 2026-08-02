@@ -224,10 +224,27 @@ internal object TextInsertedTransaction {
         val paragraphs = lines.paragraphs
         val currentIndex = paragraphs.indexOfFirst { it.startOffset == paragraph.startOffset }
         if (currentIndex < 0) return 1
-        return paragraphs.getOrNull(currentIndex - 1)?.startPiece?.decorator?.toLevel()
-            ?: paragraphs.getOrNull(currentIndex + 1)?.startPiece?.decorator?.toLevel()
-            ?: 1
+
+        fun numberedLevelSteppingFrom(step: Int): Int? {
+            var index = currentIndex + step
+            while (index in paragraphs.indices) {
+                val neighbor = paragraphs[index]
+                when {
+                    isNumberedListParagraph(neighbor) ->
+                        return neighbor.startPiece.decorator.toLevel()
+
+                    neighbor.isListItem -> return null
+                    else -> index += step
+                }
+            }
+            return null
+        }
+
+        return numberedLevelSteppingFrom(-1) ?: numberedLevelSteppingFrom(1) ?: 1
     }
+
+    private fun isNumberedListParagraph(paragraph: PieceParagraph): Boolean =
+        paragraph.isListItem && paragraph.paragraphType == TextEditorListItem.NumberedList
 
     private fun insertTextInParagraph(
         actionModel: TextEditorAction.TextAdded,

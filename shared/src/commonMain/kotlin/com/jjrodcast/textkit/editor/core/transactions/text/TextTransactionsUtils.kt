@@ -63,27 +63,17 @@ internal object TextTransactionsUtils {
         val currentIndex = paragraphs.indexOfFirst { it.startOffset == paragraph.startOffset }
         if (currentIndex < 0) return emptyList()
 
-        val numberedIndices = paragraphs.indices.filter {
-            paragraphs[it].isListItem && paragraphs[it].paragraphType == TextEditorListItem.NumberedList
-        }
-        if (numberedIndices.isEmpty()) return emptyList()
-
-        val hasNumberedBefore = numberedIndices.any { it < currentIndex }
-        val hasNumberedAfter = numberedIndices.any { it > currentIndex }
-        if (!hasNumberedBefore && !hasNumberedAfter) return emptyList()
-
-        val rangeStart = numberedIndices.filter { it < currentIndex }.maxOrNull() ?: currentIndex
-        val rangeEnd = numberedIndices.filter { it > currentIndex }.maxOrNull()
-            ?: numberedIndices.filter { it <= currentIndex }.maxOrNull()
-            ?: currentIndex
+        val targetLevel = insertedDecorator.level
+        val connectedRange = connectedNumberedSiblingRange(paragraphs, currentIndex, targetLevel)
+            ?: return emptyList()
 
         val decoratorText = insertedDecorator.createDecoratorString()
         val localItems = paragraphs.withIndex()
             .filter { (index, pieceParagraph) ->
-                index in rangeStart..rangeEnd &&
+                index in connectedRange &&
                     (
-                        (pieceParagraph.isListItem && pieceParagraph.paragraphType == TextEditorListItem.NumberedList) ||
-                            index == currentIndex
+                        index == currentIndex ||
+                            isNumberedSiblingAtLevel(pieceParagraph, targetLevel)
                         )
             }
             .mapIndexed { index, (originalIndex, pieceParagraph) ->
@@ -103,8 +93,98 @@ internal object TextTransactionsUtils {
             }
 
         if (localItems.size <= 1) return emptyList()
-        return PositionalListItemUtils.reorderItems(localItems)
+
+        val startCount = localItems.firstNotNullOfOrNull { item ->
+            item.richPiece.decorator?.toCount()
+        } ?: 1
+        return PositionalListItemUtils.reorderItems(localItems, start = startCount)
     }
+
+    /**
+     * Document-order span covering the plain paragraph being converted plus numbered siblings at
+     * [targetLevel] reachable without crossing another list kind. Plain paragraphs are crossed
+     * only as gaps; bullets/tasks/block items act as barriers so distant numbered items in the
+     * neighbor window are not pulled into the same renumber pass.
+     */
+    private fun connectedNumberedSiblingRange(
+        paragraphs: List<PieceParagraph>,
+        currentIndex: Int,
+        targetLevel: Int,
+    ): IntRange? {
+        fun isNumberedSibling(pieceParagraph: PieceParagraph) =
+            isNumberedSiblingAtLevel(pieceParagraph, targetLevel)
+
+        fun isBarrier(pieceParagraph: PieceParagraph) =
+            pieceParagraph.isListItem && !isNumberedSibling(pieceParagraph)
+
+        var hasNumberedBefore = false
+        var probe = currentIndex - 1
+        while (probe >= 0) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    hasNumberedBefore = true
+                    break
+                }
+
+                else -> probe--
+            }
+        }
+
+        var hasNumberedAfter = false
+        probe = currentIndex + 1
+        while (probe < paragraphs.size) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    hasNumberedAfter = true
+                    break
+                }
+
+                else -> probe++
+            }
+        }
+
+        if (!hasNumberedBefore && !hasNumberedAfter) return null
+
+        var start = currentIndex
+        probe = currentIndex - 1
+        while (probe >= 0) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    start = probe
+                    probe--
+                }
+
+                else -> probe--
+            }
+        }
+
+        var end = currentIndex
+        probe = currentIndex + 1
+        while (probe < paragraphs.size) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    end = probe
+                    probe++
+                }
+
+                else -> probe++
+            }
+        }
+
+        return start..end
+    }
+
+    private fun isNumberedSiblingAtLevel(
+        pieceParagraph: PieceParagraph,
+        targetLevel: Int,
+    ): Boolean =
+        pieceParagraph.isListItem &&
+            pieceParagraph.paragraphType == TextEditorListItem.NumberedList &&
+            pieceParagraph.startPiece.decorator.toLevel() == targetLevel
 
     internal fun reorderListItemsOnUpdate(lines: MultiPieceParagraph): List<TextEditorListItemTransaction> {
         val currentParagraphIndex = lines.selectedParagraphIndices.first()
