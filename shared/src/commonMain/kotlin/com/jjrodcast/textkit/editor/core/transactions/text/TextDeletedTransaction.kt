@@ -42,7 +42,13 @@ internal object TextDeletedTransaction {
         return if (selectedParagraphs.size > 1) {
             val firstParagraphInRange = selectedParagraphs.first()
             val lastParagraphInRange = selectedParagraphs.last()
-            deleteOnMultipleParagraphs(firstParagraphInRange, lastParagraphInRange, lines, actionModel)
+            deleteOnMultipleParagraphs(
+                firstParagraphInRange,
+                lastParagraphInRange,
+                lines,
+                actionModel,
+                documentLength = manager.text.length,
+            )
         } else {
             manager.transaction.deleteOnSingleParagraph(selectedParagraphs.first(), lines, actionModel)
         }
@@ -91,7 +97,8 @@ internal object TextDeletedTransaction {
         firstParagraph: PieceParagraph,
         lastParagraph: PieceParagraph,
         lines: MultiPieceParagraph,
-        actionModel: TextEditorAction.TextRemoved
+        actionModel: TextEditorAction.TextRemoved,
+        documentLength: Int,
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         val firstParagraphIncludesDecorator = firstParagraph.piecesInSelectedRange.first().piece.isDecorator
         // Document coordinates: the window's end lies strictly inside the last item's decorator
@@ -108,9 +115,13 @@ internal object TextDeletedTransaction {
         var length = actionModel.length
 
         if (firstParagraphIncludesDecorator) {
-            val remainingDecoratorOffset = getOffsetAfterDecorator(firstParagraph, actionModel.offset)
-            offset += remainingDecoratorOffset
-            length -= remainingDecoratorOffset
+            val decorSkip = maxOf(getOffsetAfterDecorator(firstParagraph, actionModel.offset), 0)
+            val wouldOrphanOpeningDecorator = decorSkip > 0 &&
+                actionModel.length >= documentLength - actionModel.offset
+            if (!wouldOrphanOpeningDecorator) {
+                offset += decorSkip
+                length = maxOf(length - decorSkip, 0)
+            }
         }
 
         if (isLastDecoratorPartiallySelected) {
@@ -155,18 +166,23 @@ internal object TextDeletedTransaction {
         return TextDecoratorTransaction.getDeleteTransaction(paragraph, lines, actionModel)
     }
 
-    private fun deleteTextAndDecorator(
+    private fun TextEditorTransaction.deleteTextAndDecorator(
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextRemoved
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return if (paragraph.piecesInSelectedRange.first().piece.isDecorator) {
-            val remainingDecoratorOffset = getOffsetAfterDecorator(paragraph, actionModel.offset)
-            val newOffset = actionModel.offset + remainingDecoratorOffset
-            val newLength = actionModel.length - remainingDecoratorOffset
-            val deleteTransaction = TextTransactionsUtils.deleteTransaction(newOffset, newLength)
-            val range = TextRange(newOffset)
-
-            Pair(range, listOf(deleteTransaction))
+            val decorSkip = maxOf(getOffsetAfterDecorator(paragraph, actionModel.offset), 0)
+            val wouldOrphanOpeningDecorator = decorSkip > 0 &&
+                actionModel.length >= text.length - actionModel.offset
+            if (wouldOrphanOpeningDecorator) {
+                val deleteTransaction = TextTransactionsUtils.deleteTransaction(actionModel.offset, actionModel.length)
+                Pair(TextRange(actionModel.offset), listOf(deleteTransaction))
+            } else {
+                val newOffset = actionModel.offset + decorSkip
+                val newLength = maxOf(actionModel.length - decorSkip, 0)
+                val deleteTransaction = TextTransactionsUtils.deleteTransaction(newOffset, newLength)
+                Pair(TextRange(newOffset), listOf(deleteTransaction))
+            }
         } else {
             val deleteTransaction = TextTransactionsUtils.deleteTransaction(actionModel.offset, actionModel.length)
             val range = TextRange(actionModel.offset)

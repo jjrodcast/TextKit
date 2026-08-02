@@ -227,7 +227,8 @@ internal object TextInsertedTransaction {
 
         val length = currentDecorator.createDecoratorString().length
         val nextLevelTabsLength = if (currentParagraph.startPiece.decorator.toLevel() > 1) TABS.length else length
-        val rangeOffset = actionModel.offset - nextLevelTabsLength
+        val rangeOffset = (actionModel.offset - nextLevelTabsLength)
+            .coerceAtLeast(currentParagraph.startOffset)
 
         return Pair(TextRange(rangeOffset), transactions)
     }

@@ -258,7 +258,7 @@ internal data class MultiPieceParagraph(
             // so we take the marks of the first piece on the left side.
             data.size == 1 || (data.size == 2 && range.collapsed) -> {
                 val element = data.first()
-                if (element.isDecorator) MarkSearchType()
+                if (element.isDecorator) return MarkSearchType()
                 if (element.piece.marks.any { it is LinkMark }) {
                     val piece = element.piece
                     val newRange = if (range.collapsed) {
