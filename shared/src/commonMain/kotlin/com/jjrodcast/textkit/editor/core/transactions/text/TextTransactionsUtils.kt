@@ -1,13 +1,17 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
 import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
+import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
 import com.jjrodcast.textkit.editor.core.converters.utils.PositionalListItemUtils
 import com.jjrodcast.textkit.editor.core.converters.utils.createTransactions
 import com.jjrodcast.textkit.editor.core.converters.utils.flatten
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
 import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toLevel
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
@@ -43,6 +47,63 @@ internal object TextTransactionsUtils {
         val decoratorLength = paragraph.startPiece.length
         val decoratorEndOffset = decoratorOffset + decoratorLength
         return decoratorEndOffset - offset
+    }
+
+    /**
+     * After the user types a numbered-list marker on a plain paragraph that sits in a numbered
+     * sequence (e.g. exiting an empty item with Enter, then typing `3. `), renumber the connected
+     * block so following siblings stay in order.
+     */
+    internal fun numberedListReorderAfterPatternInsert(
+        lines: MultiPieceParagraph,
+        paragraph: PieceParagraph,
+        insertedDecorator: TextDecoratorModel.NumberDecoratorModel,
+    ): List<PositionalListItem> {
+        val paragraphs = lines.paragraphs
+        val currentIndex = paragraphs.indexOfFirst { it.startOffset == paragraph.startOffset }
+        if (currentIndex < 0) return emptyList()
+
+        val numberedIndices = paragraphs.indices.filter {
+            paragraphs[it].isListItem && paragraphs[it].paragraphType == TextEditorListItem.NumberedList
+        }
+        if (numberedIndices.isEmpty()) return emptyList()
+
+        val hasNumberedBefore = numberedIndices.any { it < currentIndex }
+        val hasNumberedAfter = numberedIndices.any { it > currentIndex }
+        if (!hasNumberedBefore && !hasNumberedAfter) return emptyList()
+
+        val rangeStart = numberedIndices.filter { it < currentIndex }.maxOrNull() ?: currentIndex
+        val rangeEnd = numberedIndices.filter { it > currentIndex }.maxOrNull()
+            ?: numberedIndices.filter { it <= currentIndex }.maxOrNull()
+            ?: currentIndex
+
+        val decoratorText = insertedDecorator.createDecoratorString()
+        val localItems = paragraphs.withIndex()
+            .filter { (index, pieceParagraph) ->
+                index in rangeStart..rangeEnd &&
+                    (
+                        (pieceParagraph.isListItem && pieceParagraph.paragraphType == TextEditorListItem.NumberedList) ||
+                            index == currentIndex
+                        )
+            }
+            .mapIndexed { index, (originalIndex, pieceParagraph) ->
+                val richPiece = if (originalIndex == currentIndex) {
+                    pieceParagraph.startPiece.copy(
+                        decorator = insertedDecorator,
+                        length = decoratorText.length,
+                    )
+                } else {
+                    pieceParagraph.startPiece
+                }
+                PositionalListItem(
+                    index = index,
+                    richPiece = richPiece,
+                    offsetInDocument = pieceParagraph.startOffset,
+                )
+            }
+
+        if (localItems.size <= 1) return emptyList()
+        return PositionalListItemUtils.reorderItems(localItems)
     }
 
     internal fun reorderListItemsOnUpdate(lines: MultiPieceParagraph): List<TextEditorListItemTransaction> {

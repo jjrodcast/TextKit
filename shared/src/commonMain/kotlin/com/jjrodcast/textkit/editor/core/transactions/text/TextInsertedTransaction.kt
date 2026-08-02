@@ -71,7 +71,7 @@ internal object TextInsertedTransaction {
         return if (updatedSelectedParagraph != null && isAddingTextToListItem) {
             insertTextInListParagraph(updatedSelectedParagraph, lines, actionModel)
         } else {
-            insertTextInParagraph(updatedSelectedParagraph, actionModel)
+            insertTextInParagraph(updatedSelectedParagraph, lines, actionModel)
         }
     }
 
@@ -133,29 +133,75 @@ internal object TextInsertedTransaction {
 
     private fun insertTextInParagraph(
         paragraph: PieceParagraph?,
+        lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextAdded
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return when {
-            paragraph == null || paragraph.text.isLineBreak() -> insertTextInParagraph(
+            paragraph == null -> insertTextInParagraph(
                 actionModel,
                 getMarksForInsertion(actionModel.marks, filterLinkMarks = true)
             )
 
-            paragraph.text.isNotEmpty() -> insertTextInNonEmptyParagraph(paragraph, actionModel)
-            else -> insertTextInParagraph(actionModel, getMarksForInsertion(actionModel.marks))
+            paragraph.text.isLineBreak() && actionModel.text.isLineBreak() -> insertTextInParagraph(
+                actionModel,
+                getMarksForInsertion(actionModel.marks, filterLinkMarks = true)
+            )
+
+            else -> insertTextInNonEmptyParagraph(paragraph, lines, actionModel)
         }
     }
 
     private fun insertTextInNonEmptyParagraph(
         paragraph: PieceParagraph,
+        lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextAdded
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         // We need to validate if the text added matches with the regex
         val input = matchesListItemPattern(paragraph, actionModel)
         // It matches the regex, so we need to insert the decorator, otherwise just add the text
         return if (input != null) {
-            val updateTransaction = TextDecoratorTransaction.getUpdateDecoratorTransaction(input, paragraph, actionModel)
-            // TODO: Reorder elements on numbered lists.
+            val insertedDecorator = input.model.piece?.decorator
+            val leveledNumberedDecorator = if (insertedDecorator is TextDecoratorModel.NumberDecoratorModel) {
+                val listLevel = numberedListLevelAdjacentTo(lines, paragraph)
+                insertedDecorator.copyValue(level = listLevel)
+            } else {
+                null
+            }
+            val reorderedItems = if (leveledNumberedDecorator != null) {
+                TextTransactionsUtils.numberedListReorderAfterPatternInsert(lines, paragraph, leveledNumberedDecorator)
+            } else {
+                emptyList()
+            }
+            val reorderedCurrent = reorderedItems.find { it.offsetInDocument == paragraph.startOffset }
+            val updateInput = when {
+                reorderedCurrent != null && reorderedCurrent.modified -> {
+                    val decorator = reorderedCurrent.newRichPiece.decorator
+                    TextInputResult(
+                        TextEditorModel.create(
+                            text = decorator.createDecoratorString(),
+                            decorator = decorator,
+                        )
+                    )
+                }
+
+                leveledNumberedDecorator != null -> {
+                    TextInputResult(
+                        TextEditorModel.create(
+                            text = leveledNumberedDecorator.createDecoratorString(),
+                            decorator = leveledNumberedDecorator,
+                        )
+                    )
+                }
+
+                else -> input
+            }
+            val updateTransaction = TextDecoratorTransaction.getUpdateDecoratorTransaction(updateInput, paragraph, actionModel)
+            val transactions = mutableListOf(updateTransaction)
+            if (reorderedItems.isNotEmpty()) {
+                transactions.addAll(
+                    reorderedItems.createTransactions().filter { it.offsetInDocument != paragraph.startOffset }
+                )
+            }
             val modelLength = when (val type = updateTransaction.type) {
                 is TextEditorDecoratorTransactionType.Delete -> 0
                 is TextEditorDecoratorTransactionType.Insert -> type.model.text.length
@@ -163,12 +209,24 @@ internal object TextInsertedTransaction {
             }
             Pair(
                 TextRange(paragraph.startOffset + modelLength),
-                listOf(updateTransaction)
+                transactions
             )
         } else {
             val finalMarks = getMarksForInsertion(actionModel.marks)
             insertTextInParagraph(actionModel, finalMarks)
         }
+    }
+
+    private fun numberedListLevelAdjacentTo(
+        lines: MultiPieceParagraph,
+        paragraph: PieceParagraph,
+    ): Int {
+        val paragraphs = lines.paragraphs
+        val currentIndex = paragraphs.indexOfFirst { it.startOffset == paragraph.startOffset }
+        if (currentIndex < 0) return 1
+        return paragraphs.getOrNull(currentIndex - 1)?.startPiece?.decorator?.toLevel()
+            ?: paragraphs.getOrNull(currentIndex + 1)?.startPiece?.decorator?.toLevel()
+            ?: 1
     }
 
     private fun insertTextInParagraph(
