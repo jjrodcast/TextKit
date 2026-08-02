@@ -211,7 +211,9 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
      * points reach the piece table directly, so they clamp here.
      */
     private fun contentStartFor(offset: Int): Int {
-        val item = transaction.getLineContent(offset, offset).paragraphs.firstOrNull { paragraph ->
+        // The lookup spans one character past [offset]: at an exact paragraph boundary a collapsed
+        // range resolves to the paragraph that ends there, never the item that starts there.
+        val item = transaction.getLineContent(offset, offset + 1).paragraphs.firstOrNull { paragraph ->
             paragraph.isListItem &&
                 offset >= paragraph.startOffset &&
                 offset < paragraph.startOffset + paragraph.startPiece.length
@@ -257,12 +259,25 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
             }
         )
         val start = contentStartFor(replaceRange.min)
-        val length = maxOf(replaceRange.max, start) - start
-        if (length > 0) transaction.update(start, length, model) else transaction.insert(
-            model,
+        val end = maxOf(replaceRange.max, start)
+        // The replaced window is removed through the text path rather than spliced out of the piece
+        // table: a range reaching past the end of its paragraph covers that paragraph's line break,
+        // and dropping it raw merges the next paragraph up. That path resolves decorators for the
+        // window it removes (#74, #82, #104).
+        val insertAt = if (end > start) {
+            val removal = TextEditorAction.TextRemoved(
+                offset = start,
+                length = end - start,
+                selection = TextRange(start),
+            )
+            // Clamped again: the removal can leave the caret on the marker of the item that moved
+            // up into the freed line.
+            contentStartFor(TextTransaction.onTextUpdated(removal, this).second.end)
+        } else {
             start
-        )
-        return TextRange(start + text.length)
+        }
+        transaction.insert(model, insertAt)
+        return TextRange(insertAt + text.length)
     }
 
     /**
