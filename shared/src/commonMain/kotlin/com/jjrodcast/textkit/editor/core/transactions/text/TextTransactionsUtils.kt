@@ -1,13 +1,17 @@
 package com.jjrodcast.textkit.editor.core.transactions.text
 
 import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
+import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
 import com.jjrodcast.textkit.editor.core.converters.utils.PositionalListItemUtils
 import com.jjrodcast.textkit.editor.core.converters.utils.createTransactions
 import com.jjrodcast.textkit.editor.core.converters.utils.flatten
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
 import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toLevel
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
@@ -44,6 +48,143 @@ internal object TextTransactionsUtils {
         val decoratorEndOffset = decoratorOffset + decoratorLength
         return decoratorEndOffset - offset
     }
+
+    /**
+     * After the user types a numbered-list marker on a plain paragraph that sits in a numbered
+     * sequence (e.g. exiting an empty item with Enter, then typing `3. `), renumber the connected
+     * block so following siblings stay in order.
+     */
+    internal fun numberedListReorderAfterPatternInsert(
+        lines: MultiPieceParagraph,
+        paragraph: PieceParagraph,
+        insertedDecorator: TextDecoratorModel.NumberDecoratorModel,
+    ): List<PositionalListItem> {
+        val paragraphs = lines.paragraphs
+        val currentIndex = paragraphs.indexOfFirst { it.startOffset == paragraph.startOffset }
+        if (currentIndex < 0) return emptyList()
+
+        val targetLevel = insertedDecorator.level
+        val connectedRange = connectedNumberedSiblingRange(paragraphs, currentIndex, targetLevel)
+            ?: return emptyList()
+
+        val decoratorText = insertedDecorator.createDecoratorString()
+        val localItems = paragraphs.withIndex()
+            .filter { (index, pieceParagraph) ->
+                index in connectedRange &&
+                    (
+                        index == currentIndex ||
+                            isNumberedSiblingAtLevel(pieceParagraph, targetLevel)
+                        )
+            }
+            .mapIndexed { index, (originalIndex, pieceParagraph) ->
+                val richPiece = if (originalIndex == currentIndex) {
+                    pieceParagraph.startPiece.copy(
+                        decorator = insertedDecorator,
+                        length = decoratorText.length,
+                    )
+                } else {
+                    pieceParagraph.startPiece
+                }
+                PositionalListItem(
+                    index = index,
+                    richPiece = richPiece,
+                    offsetInDocument = pieceParagraph.startOffset,
+                )
+            }
+
+        if (localItems.size <= 1) return emptyList()
+
+        val startCount = localItems.firstNotNullOfOrNull { item ->
+            item.richPiece.decorator?.toCount()
+        } ?: 1
+        return PositionalListItemUtils.reorderItems(localItems, start = startCount)
+    }
+
+    /**
+     * Document-order span covering the plain paragraph being converted plus numbered siblings at
+     * [targetLevel] reachable without crossing another list kind. Plain paragraphs are crossed
+     * only as gaps; bullets/tasks/block items act as barriers so distant numbered items in the
+     * neighbor window are not pulled into the same renumber pass.
+     */
+    private fun connectedNumberedSiblingRange(
+        paragraphs: List<PieceParagraph>,
+        currentIndex: Int,
+        targetLevel: Int,
+    ): IntRange? {
+        fun isNumberedSibling(pieceParagraph: PieceParagraph) =
+            isNumberedSiblingAtLevel(pieceParagraph, targetLevel)
+
+        fun isBarrier(pieceParagraph: PieceParagraph) =
+            pieceParagraph.isListItem && !isNumberedSibling(pieceParagraph)
+
+        var hasNumberedBefore = false
+        var probe = currentIndex - 1
+        while (probe >= 0) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    hasNumberedBefore = true
+                    break
+                }
+
+                else -> probe--
+            }
+        }
+
+        var hasNumberedAfter = false
+        probe = currentIndex + 1
+        while (probe < paragraphs.size) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    hasNumberedAfter = true
+                    break
+                }
+
+                else -> probe++
+            }
+        }
+
+        if (!hasNumberedBefore && !hasNumberedAfter) return null
+
+        var start = currentIndex
+        probe = currentIndex - 1
+        while (probe >= 0) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    start = probe
+                    probe--
+                }
+
+                else -> probe--
+            }
+        }
+
+        var end = currentIndex
+        probe = currentIndex + 1
+        while (probe < paragraphs.size) {
+            when {
+                isBarrier(paragraphs[probe]) -> break
+                isNumberedSibling(paragraphs[probe]) -> {
+                    end = probe
+                    probe++
+                }
+
+                else -> probe++
+            }
+        }
+
+        return start..end
+    }
+
+    private fun isNumberedSiblingAtLevel(
+        pieceParagraph: PieceParagraph,
+        targetLevel: Int,
+    ): Boolean =
+        pieceParagraph.isListItem &&
+            pieceParagraph.paragraphType == TextEditorListItem.NumberedList &&
+            pieceParagraph.startPiece.decorator.toLevel() == targetLevel
 
     internal fun reorderListItemsOnUpdate(lines: MultiPieceParagraph): List<TextEditorListItemTransaction> {
         val currentParagraphIndex = lines.selectedParagraphIndices.first()

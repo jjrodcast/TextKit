@@ -411,6 +411,31 @@ class ListItemUiTest {
     }
 
     @Test
+    fun complexJsonV1_enterEmptyItemThenTypeNumberedMarkerRenumbersFollowingItems() {
+        val state = stateWith(DocumentUtils.complexJsonV1)
+        val text = state.textFieldValue.text
+        val endOfFirst = text.lastIndexOf("item", text.indexOf("Second")) + "item".length
+        state.simulateTypingAt(endOfFirst, "\n")
+        val afterFirstEnter = state.textFieldValue
+        val mapping = state.visualTransformation.filter(AnnotatedString(afterFirstEnter.text)).offsetMapping
+        val caretAfterExit = mapping.transformedToOriginal(afterFirstEnter.selection.max)
+        state.simulateTypingAt(caretAfterExit, "\n")
+        val afterSecondEnter = state.textFieldValue
+        val mapping2 = state.visualTransformation.filter(AnnotatedString(afterSecondEnter.text)).offsetMapping
+        val caretForMarker = mapping2.transformedToOriginal(afterSecondEnter.selection.max)
+        state.simulateTypingAt(caretForMarker, "3. ")
+        state.simulateTypingAt(state.textFieldValue.selection.max, "gap")
+        val updated = state.textFieldValue.text
+        val secondIndex = updated.indexOf("Second")
+        val prefixBeforeSecond = updated.substring((secondIndex - 4).coerceAtLeast(0), secondIndex)
+        assertTrue(
+            prefixBeforeSecond.contains("3."),
+            "Second item must be renumbered after re-entering the list, got: $updated"
+        )
+        assertTrue(updated.contains("gap"))
+    }
+
+    @Test
     fun complexJsonV1_firstListItemEnterThenTypeInNewEmptyItem() {
         val state = stateWith(DocumentUtils.complexJsonV1)
         val text = state.textFieldValue.text
