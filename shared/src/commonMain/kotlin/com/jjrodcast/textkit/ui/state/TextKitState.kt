@@ -345,12 +345,10 @@ class TextKitState(
             return TextRange(resolved)
         }
 
-        // Range selections must snap through display space so Compose never applies field offsets
-        // (which include list gutters) to the shorter transformed layout text.
-        return TextRange(
-            roundTripFieldOffset(selection.start),
-            roundTripFieldOffset(selection.end),
-        )
+        // Range endpoints stay in field coordinates (TextFieldValue is always field text). Round-
+        // tripping through display space would snap offset 0 out of a list gutter into content
+        // (e.g. 0 → after "1. ") and break select-all and delete-over-selection.
+        return selection
     }
 
     /**
@@ -1467,12 +1465,21 @@ class TextKitState(
                     priorSelection = textFieldValue.selection,
                     updatedText = prevTextFieldValue.text,
                 )
-                TextEditorAction.TextUpdated(
-                    removeLength = textFieldValue.selection.length,
-                    text = replacement,
-                    offset = offset,
-                    selection = prevTextFieldValue.selection
-                )
+                val removeLength = textFieldValue.selection.max - textFieldValue.selection.min
+                if (replacement.isEmpty()) {
+                    TextEditorAction.TextRemoved(
+                        offset = offset,
+                        length = removeLength,
+                        selection = prevTextFieldValue.selection,
+                    )
+                } else {
+                    TextEditorAction.TextUpdated(
+                        removeLength = removeLength,
+                        text = replacement,
+                        offset = offset,
+                        selection = prevTextFieldValue.selection
+                    )
+                }
             }
 
             else -> {
@@ -1504,12 +1511,21 @@ class TextKitState(
                     priorSelection = textFieldValue.selection,
                     updatedText = prevTextFieldValue.text,
                 )
-                TextEditorAction.TextUpdated(
-                    removeLength = textFieldValue.selection.length,
-                    text = replacement,
-                    offset = offset,
-                    selection = prevTextFieldValue.selection
-                )
+                val removeLength = textFieldValue.selection.max - textFieldValue.selection.min
+                if (replacement.isEmpty()) {
+                    TextEditorAction.TextRemoved(
+                        offset = offset,
+                        length = removeLength,
+                        selection = prevTextFieldValue.selection,
+                    )
+                } else {
+                    TextEditorAction.TextUpdated(
+                        removeLength = removeLength,
+                        text = replacement,
+                        offset = offset,
+                        selection = prevTextFieldValue.selection
+                    )
+                }
             }
 
             else -> TextEditorAction.TextRemoved(
