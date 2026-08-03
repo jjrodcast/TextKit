@@ -90,7 +90,8 @@ internal object EditingStress {
     /** Decides the next operation from [rng] and returns its description plus a thunk that runs it. */
     private fun decideOp(editor: TextKitEditorManager, rng: Random): Pair<String, () -> Unit> {
         val len = editor.text.length
-        return when (rng.nextInt(16)) {
+        // 17 values for 16 explicit branches plus the colour op in `else`.
+        return when (rng.nextInt(17)) {
             0 -> {
                 val at = rng.nextInt(len + 1)
                 val text = randomText(rng)
