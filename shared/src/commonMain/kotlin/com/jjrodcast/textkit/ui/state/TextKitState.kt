@@ -283,8 +283,13 @@ class TextKitState(
 
     private var annotatedString by mutableStateOf(AnnotatedString(text = ""))
 
-    private var editorSegments: List<EditorParagraphSegment> = emptyList()
-    private var editorOffsetMapping: OffsetMapping = OffsetMapping.Identity
+    // Snapshot state, not plain fields: the gutter overlay positions every list marker from these
+    // against `textLayoutResult`, which IS snapshot state. Untracked, the overlay recomposed only
+    // because some other state changed and then read whatever these happened to hold — so for a
+    // frame the markers could be drawn from a different generation than the layout they sit on,
+    // which reads as a blink while typing or removing items (#112).
+    private var editorSegments: List<EditorParagraphSegment> by mutableStateOf(emptyList())
+    private var editorOffsetMapping: OffsetMapping by mutableStateOf(OffsetMapping.Identity)
 
     private val viewerBlocksState = derivedStateOf {
         annotatedString // snapshot dependency for highlight/theme rebuilds
@@ -310,6 +315,13 @@ class TextKitState(
     internal val paragraphs get() = manager.getParagraphs()
 
     internal fun editorSegments(): List<EditorParagraphSegment> = editorSegments
+
+    /**
+     * Length of the display text [editorSegments] was built for. The gutter overlay compares it
+     * against the length the layout actually measured, so it can tell a stale layout from a current
+     * one instead of placing markers with mismatched coordinates (#112).
+     */
+    internal val editorDisplayLength: Int get() = annotatedString.length
 
     internal fun displayOffsetToFieldOffset(displayOffset: Int): Int {
         val displayLength = annotatedString.length

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -128,34 +129,55 @@ private class ListItemOffsetMapping(
 internal fun ListItemEditorGutterOverlay(
     layoutResult: TextLayoutResult?,
     segments: List<EditorParagraphSegment>,
+    displayLength: Int,
     textStyle: TextStyle,
     textColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    val overlaySegments = editorOverlaySegments(segments)
-    if (layoutResult == null || overlaySegments.isEmpty()) return
+    if (layoutResult == null) return
 
-    val displayLength = layoutResult.layoutInput.text.length
-    if (displayLength == 0) return
+    val laidOutLength = layoutResult.layoutInput.text.length
+    if (laidOutLength == 0) return
+
+    // The layout lags the segments by a frame: right after a list item is removed the segments
+    // already describe the shorter document while [layoutResult] still measures the longer one, so
+    // every marker would be placed on whatever line the *old* text had at that offset — the whole
+    // gutter jumps for one frame. Rather than mixing the two generations, keep painting the last
+    // pair that agreed until the matching layout arrives (#112).
+    val lastAgreed = remember { arrayOfNulls<List<GutterMarker>>(1) }
+    val markers = if (laidOutLength == displayLength) {
+        buildGutterMarkers(editorOverlaySegments(segments), layoutResult, laidOutLength)
+            .also { lastAgreed[0] = it }
+    } else {
+        lastAgreed[0] ?: return
+    }
+    if (markers.isEmpty()) return
 
     Box(modifier = modifier) {
         val markerStyle = textStyle.copy(color = textColor)
-        overlaySegments.forEach { segment ->
-            val gutter = segment.gutter ?: return@forEach
-            val label = gutter.createDecoratorString()
-            if (label.isEmpty()) return@forEach
-
-            val displayOffset = segment.displayStart.coerceIn(0, displayLength - 1)
-            val lineIndex = layoutResult.getLineForOffset(displayOffset)
-            val lineTop = layoutResult.getLineTop(lineIndex)
-
+        markers.forEach { marker ->
             Text(
-                text = label,
+                text = marker.label,
                 style = markerStyle,
                 modifier = Modifier.offset {
-                    IntOffset(x = 0, y = lineTop.roundToInt())
+                    IntOffset(x = 0, y = marker.top.roundToInt())
                 }
             )
         }
     }
+}
+
+/** A list marker resolved to the vertical position of the line it belongs to. */
+private data class GutterMarker(val label: String, val top: Float)
+
+private fun buildGutterMarkers(
+    overlaySegments: List<EditorParagraphSegment>,
+    layoutResult: TextLayoutResult,
+    displayLength: Int,
+): List<GutterMarker> = overlaySegments.mapNotNull { segment ->
+    val label = segment.gutter?.createDecoratorString().orEmpty()
+    if (label.isEmpty()) return@mapNotNull null
+    val displayOffset = segment.displayStart.coerceIn(0, displayLength - 1)
+    val lineIndex = layoutResult.getLineForOffset(displayOffset)
+    GutterMarker(label = label, top = layoutResult.getLineTop(lineIndex))
 }
