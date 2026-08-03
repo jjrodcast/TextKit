@@ -90,7 +90,7 @@ internal object EditingStress {
     /** Decides the next operation from [rng] and returns its description plus a thunk that runs it. */
     private fun decideOp(editor: TextKitEditorManager, rng: Random): Pair<String, () -> Unit> {
         val len = editor.text.length
-        return when (rng.nextInt(12)) {
+        return when (rng.nextInt(16)) {
             0 -> {
                 val at = rng.nextInt(len + 1)
                 val text = randomText(rng)
@@ -165,12 +165,66 @@ internal object EditingStress {
                 "align $align $range" to { editor.setTextAlign(range, align); Unit }
             }
 
+            11 -> {
+                val range = randomRange(rng, len)
+                val href = if (rng.nextBoolean()) "https://example.dev" else ""
+                "link '$href' $range" to { editor.setLink(range, href); Unit }
+            }
+
+            12 -> {
+                // Tokens replace the trigger text the caller matched, which always lies inside one
+                // paragraph's own content — never across a decorator.
+                val range = contentRange(editor, rng) ?: return "mention <no content>" to {}
+                "mention $range" to { editor.insertMention(id = "u1", label = "Jorge", replaceRange = range); Unit }
+            }
+
+            13 -> {
+                val range = contentRange(editor, rng) ?: return "hashtag <no content>" to {}
+                "hashtag $range" to {
+                    editor.insertToken(nodeType = "hashtag", id = "h1", label = "kt", replaceRange = range)
+                    Unit
+                }
+            }
+
+            14 -> {
+                val at = rng.nextInt(len + 1)
+                "embed @$at" to { editor.insertEmbed("table", TABLE_BLOCK, label = "T", at = TextRange(at)); Unit }
+            }
+
+            15 -> {
+                // Removal takes the placeholder's own range, the way the caller gets it.
+                val at = if (len == 0) 0 else rng.nextInt(len)
+                val embed = editor.embedAt(at) ?: return "unembed <none>" to {}
+                "unembed @$at" to { editor.removeEmbedAt(embed.range); Unit }
+            }
+
             else -> {
                 val range = randomRange(rng, len)
                 val color = if (rng.nextBoolean()) "#ff0000" else null
                 "color $color $range" to { editor.setColor(range, color); Unit }
             }
         }
+    }
+
+    /**
+     * A range inside one paragraph's own content — what a token's caller passes, having matched the
+     * trigger text the user typed. Returns null while no paragraph has any content yet.
+     */
+    private fun contentRange(editor: TextKitEditorManager, rng: Random): TextRange? {
+        var offset = 0
+        val spans = editor.getParagraphs().map { paragraph ->
+            val start = offset
+            val length = paragraph.children.sumOf { it.text.length }
+            offset += length
+            val decorator = paragraph.children.first().decorator
+            val contentStart = start + if (decorator != null) paragraph.children.first().text.length else 0
+            val contentEnd = (start + length) - if (paragraph.children.last().text.endsWith("\n")) 1 else 0
+            contentStart to maxOf(contentStart, contentEnd)
+        }.filter { it.second > it.first }
+        if (spans.isEmpty()) return null
+        val (from, to) = spans[rng.nextInt(spans.size)]
+        val start = from + rng.nextInt(to - from)
+        return TextRange(start, minOf(to, start + rng.nextInt(0, 4)))
     }
 
     private fun randomText(rng: Random): String {
@@ -188,6 +242,8 @@ internal object EditingStress {
     }
 
     private const val ALPHABET = "abc de"
+
+    private const val TABLE_BLOCK = """{"type":"table","content":[{"type":"tableRow","content":[]}]}"""
 
     private val LIST_TYPES = listOf(
             TextEditorListItem.NumberedList,

@@ -128,14 +128,17 @@ internal object MultiPieceFormatTransaction {
             val transactionMarks = when {
                 canMergeWithPrevious(left.piece, currentModel.piece, finalMarks) -> {
                     val leftModel = TextEditorModel.create(left.piece)
-                    val length =
-                        leftModel.pieceLength - (range.min - leftModel.pieceStart) + currentModel.pieceLength
+                    // The length is the central piece's own portion — the merge adds the left
+                    // piece's length itself. Including the left remainder here counted it twice, so
+                    // the merged piece ran past its own text and swallowed the next piece's first
+                    // character (a swallowed line break then hides a paragraph boundary, leaving the
+                    // following item's marker mid-line).
                     transaction.getTransactionMarks(
                         leftModel,
                         currentModel,
                         null,
                         range.start,
-                        length,
+                        currentModel.pieceLength,
                         finalMarks
                     )
                 }
