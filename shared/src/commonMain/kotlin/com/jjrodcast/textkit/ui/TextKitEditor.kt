@@ -115,6 +115,7 @@ fun TextKitEditor(
                 ListItemEditorGutterOverlay(
                     layoutResult = state.textLayoutResult,
                     segments = state.editorSegments(),
+                    displayLength = state.editorDisplayLength,
                     textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
                     textColor = TextKitTheme.colors.onSurface,
                     modifier = Modifier.fillMaxSize(),
@@ -223,6 +224,7 @@ fun TextKitEditorOutlined(
                 ListItemEditorGutterOverlay(
                     layoutResult = state.textLayoutResult,
                     segments = state.editorSegments(),
+                    displayLength = state.editorDisplayLength,
                     textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
                     textColor = TextKitTheme.colors.onSurface,
                     modifier = Modifier.fillMaxSize(),
