@@ -70,7 +70,7 @@ internal object EditingStress {
     }
 
     /** Checks every structural invariant on the current document. */
-    private fun TextKitEditorManager.assertInvariants(where: String) {
+    internal fun TextKitEditorManager.assertInvariants(where: String) {
         val visible = text.replace("\n", "\\n").replace("\t", "\\t")
         getParagraphs().forEach { paragraph ->
             assertTrue(
@@ -88,7 +88,7 @@ internal object EditingStress {
     }
 
     /** Decides the next operation from [rng] and returns its description plus a thunk that runs it. */
-    private fun decideOp(editor: TextKitEditorManager, rng: Random): Pair<String, () -> Unit> {
+    internal fun decideOp(editor: TextKitEditorManager, rng: Random): Pair<String, () -> Unit> {
         val len = editor.text.length
         // 17 values for 16 explicit branches plus the colour op in `else`.
         return when (rng.nextInt(17)) {
@@ -265,7 +265,7 @@ internal object EditingStress {
     private val LIST_TYPES_IN_JSON = listOf("taskList", "bulletList", "orderedList")
 
     /** Each seed starts from one of these, so the ops churn empty, flat and nested documents. */
-    private val START_DOCS = listOf(
+    internal val START_DOCS = listOf(
             "{}",
             // Flat lists of every kind, alongside a plain paragraph.
             """{"type":"doc","content":[
