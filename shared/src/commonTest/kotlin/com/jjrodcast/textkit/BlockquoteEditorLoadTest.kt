@@ -59,6 +59,48 @@ class BlockquoteEditorLoadTest {
     }
 
     @Test
+    fun a_blockquote_inside_a_list_item_keeps_its_text() {
+        // The nested case is the treacherous one: an un-unwrapped blockquote here still reaches
+        // the piece table and RENDERS, but the export drops it — content the user can see that
+        // never saves.
+        val editor = editorFrom(
+            """{"type":"doc","content":[
+              {"type":"bulletList","content":[
+                {"type":"listItem","content":[
+                  {"type":"paragraph","content":[{"type":"text","text":"item"}]},
+                  {"type":"blockquote","content":[
+                    {"type":"paragraph","content":[{"type":"text","text":"nested quote"}]}
+                  ]}
+                ]}
+              ]}
+            ]}"""
+        )
+        assertTrue(editor.text.contains("nested quote"))
+        val saved = editor.toJson()
+        assertTrue(saved.contains("nested quote"), "quoted text rendered but lost on save: $saved")
+        assertEquals(saved, editorFrom(saved).toJson())
+    }
+
+    @Test
+    fun a_blockquote_inside_a_task_item_keeps_its_text() {
+        val editor = editorFrom(
+            """{"type":"doc","content":[
+              {"type":"taskList","content":[
+                {"type":"taskItem","attrs":{"checked":false},"content":[
+                  {"type":"paragraph","content":[{"type":"text","text":"task"}]},
+                  {"type":"blockquote","content":[
+                    {"type":"paragraph","content":[{"type":"text","text":"quoted note"}]}
+                  ]}
+                ]}
+              ]}
+            ]}"""
+        )
+        val saved = editor.toJson()
+        assertTrue(saved.contains("quoted note"), "quoted text rendered but lost on save: $saved")
+        assertEquals(saved, editorFrom(saved).toJson())
+    }
+
+    @Test
     fun a_list_inside_a_blockquote_stays_a_list() {
         val editor = editorFrom(
             """{"type":"doc","content":[

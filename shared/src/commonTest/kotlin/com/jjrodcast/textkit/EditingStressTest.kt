@@ -307,8 +307,9 @@ internal object EditingStress {
                 {"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"t"}]}]}
               ]}
             ]}""",
-            // Headings and a blockquote around a list. Both flatten into styled paragraphs on load
-            // (see PieceTableConverter), so the churn runs over the flattened form.
+            // Headings and a blockquote, alongside a list. Headings flatten into styled paragraphs
+            // and the blockquote unwraps into its inner paragraphs on load (see
+            // TextEditorTransaction.loadWith), so the churn runs over those flattened forms.
             """{"type":"doc","content":[
               {"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Title"}]},
               {"type":"paragraph","content":[{"type":"text","text":"intro"}]},
