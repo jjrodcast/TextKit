@@ -3,6 +3,7 @@ package com.jjrodcast.textkit
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.history.EditKind
+import com.jjrodcast.textkit.editor.core.history.EditorHistoryManager
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,10 +14,11 @@ import kotlin.test.assertNull
  * Property test for undo/redo over the full editing surface.
  *
  * The example tests pin individual scenarios; this checks the actual contract on random sequences.
- * Every edit from the [EditingStress] op mix is wrapped in the same capture/push protocol the UI
- * uses (`TextKitState.recordBefore`), and a model of the two history stacks — the exact `toJson()`
- * each restore must produce, plus the selection captured with it — is kept alongside. After every
- * step:
+ * Every edit from the [EditingStress] op mix is wrapped in the capture/push protocol
+ * `TextKitState.recordBefore` uses — capture before, push only when the edit changed the document —
+ * with every op recorded as a discrete step; the UI's coalescing keys are exercised separately by a
+ * dedicated typing-burst op. A model of the two history stacks — the exact `toJson()` each restore
+ * must produce, plus the selection captured with it — is kept alongside. After every step:
  *
  * 1. `undo` restores the exact pre-edit document (`toJson()` equality, not just a valid document)
  *    and returns the selection captured with the restore point.
@@ -46,7 +48,7 @@ class UndoRedoStressTest {
 /** The machinery, shared by the cross-platform smoke run and the JVM-only full sweep. */
 internal object UndoRedoStress {
 
-    private const val HISTORY_LIMIT = 100
+    private const val HISTORY_LIMIT = EditorHistoryManager.DEFAULT_LIMIT
 
     /** One expected restore: the document to come back to and the selection stored with it. */
     private class Expected(val json: String, val selection: TextRange)
@@ -72,7 +74,10 @@ internal object UndoRedoStress {
         }
     }
 
-    /** One edit from the [EditingStress] mix, recorded the way `recordBefore` records it. */
+    /**
+     * One edit from the [EditingStress] mix, recorded as a discrete step — the way `recordBefore`
+     * records everything except live typing/deleting, whose coalescing [typingBurst] covers.
+     */
     private fun editOnce(
         editor: TextKitEditorManager,
         rng: Random,
