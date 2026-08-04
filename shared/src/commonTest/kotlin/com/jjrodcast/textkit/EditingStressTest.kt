@@ -13,10 +13,11 @@ import kotlin.test.assertTrue
 /**
  * Deterministic stress test: long, seeded sequences of every editing operation — typing, breaks,
  * deletes, replaces, multiline pastes, list toggles and type switches, styles, alignment and colour
- * — over regular paragraphs, ordered/unordered/task lists and deeply nested documents. This is the
- * kind of churn that surfaces an intermittent editing bug.
+ * — over regular paragraphs, ordered/unordered/task lists, deeply nested documents, and the
+ * flattened forms headings and blockquotes load into (#115). This is the kind of churn that
+ * surfaces an intermittent editing bug.
  *
- * After every operation, five invariants hold:
+ * After every operation, six invariants hold:
  *
  * 1. No operation throws (#82, #89, #95).
  * 2. A decorator piece only ever sits at the start of its paragraph — a mid-line decorator is the
@@ -26,6 +27,8 @@ import kotlin.test.assertTrue
  * 4. The export carries no empty text nodes and no empty list nodes (#81).
  * 5. The export is a fixed point: `toJson()` → load → `toJson()` is unchanged (#57–#61, #79, #81,
  *    #87, #93, #99).
+ * 6. The HTML and Markdown exporters accept every reachable state — `toJson` was the only exporter
+ *    the sweep exercised before.
  *
  * A failure names the seed, step and operation, so a "random, can't reproduce" error becomes an
  * exact repro. The committed size keeps the run inside a couple of seconds on every target; raising
@@ -85,6 +88,13 @@ internal object EditingStress {
             assertTrue(!once.contains("\"content\":[],\"type\":\"$type\""), "empty $type at $where: $once")
         }
         assertEquals(once, editorFrom(once).toJson(), "toJson not idempotent at $where")
+        // 6. The other exporters accept every reachable state.
+        try {
+            toHtml()
+            toMarkdown()
+        } catch (t: Throwable) {
+            throw AssertionError("exporter threw at $where: ${t::class.simpleName}: ${t.message}", t)
+        }
     }
 
     /** Decides the next operation from [rng] and returns its description plus a thunk that runs it. */
@@ -295,6 +305,20 @@ internal object EditingStress {
               ]},
               {"type":"taskList","content":[
                 {"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"t"}]}]}
+              ]}
+            ]}""",
+            // Headings and a blockquote around a list. Both flatten into styled paragraphs on load
+            // (see PieceTableConverter), so the churn runs over the flattened form.
+            """{"type":"doc","content":[
+              {"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Title"}]},
+              {"type":"paragraph","content":[{"type":"text","text":"intro"}]},
+              {"type":"heading","attrs":{"level":3},"content":[{"type":"text","text":"Section"}]},
+              {"type":"blockquote","content":[
+                {"type":"paragraph","content":[{"type":"text","text":"quoted"}]},
+                {"type":"paragraph","content":[{"type":"text","text":"still quoted"}]}
+              ]},
+              {"type":"bulletList","content":[
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"item"}]}]}
               ]}
             ]}""",
         )

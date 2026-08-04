@@ -8,7 +8,8 @@ import com.jjrodcast.textkit.editor.core.converters.TextEditorConverter
 import com.jjrodcast.textkit.editor.core.interfaces.TextEditorInitTransaction
 import com.jjrodcast.textkit.editor.core.models.TextEditorDocumentModel
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
-import com.jjrodcast.textkit.editor.core.parser.BlockquoteType
+import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
+import com.jjrodcast.textkit.editor.core.parser.Blockquote
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
@@ -60,7 +61,10 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
         val filteredContent = if (this.isViewer) {
             textEditorDocument.content
         } else {
-            textEditorDocument.content.filter { it.type != BlockquoteType.Blockquote }
+            // The editor has no blockquote editing, so the node itself cannot survive, but its
+            // paragraphs can: unwrap them in place of dropping the whole block, or opening a
+            // document for editing silently deletes every quoted line.
+            textEditorDocument.content.flatMap { it.unwrapBlockquotes() }
         }
         val document = TextEditorConverter.getAsTextWithMarks(
             TextEditorDocument(filteredContent),
@@ -68,6 +72,10 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
         )
         pieceTable.build(document)
     }
+
+    /** Replaces a blockquote (at any nesting depth) with the blocks it contains. */
+    private fun BaseParagraph.unwrapBlockquotes(): List<BaseParagraph> =
+        if (this is Blockquote) content.flatMap { it.unwrapBlockquotes() } else listOf(this)
 
     override fun fromDocument(document: TextEditorDocumentModel) {
         pieceTable.build(document)

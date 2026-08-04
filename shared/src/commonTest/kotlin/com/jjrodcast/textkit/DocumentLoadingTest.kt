@@ -69,9 +69,11 @@ class DocumentLoadingTest {
     }
 
     @Test
-    fun editor_mode_strips_blockquotes_but_viewer_mode_keeps_them() {
+    fun editor_mode_unwraps_blockquotes_and_viewer_mode_keeps_them() {
+        // The editor cannot edit a blockquote, so the node degrades to its inner paragraphs —
+        // the structure is lost but the text survives an open-and-save.
         val asEditor = editorFrom(SampleDocuments.BLOCKQUOTE, isViewer = false)
-        assertEquals("before\nafter", asEditor.text)
+        assertEquals("before\nquoted text\nafter", asEditor.text)
         assertFalse(asEditor.isViewer)
 
         val asViewer = editorFrom(SampleDocuments.BLOCKQUOTE, isViewer = true)
