@@ -8,7 +8,14 @@ import com.jjrodcast.textkit.editor.core.converters.TextEditorConverter
 import com.jjrodcast.textkit.editor.core.interfaces.TextEditorInitTransaction
 import com.jjrodcast.textkit.editor.core.models.TextEditorDocumentModel
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
-import com.jjrodcast.textkit.editor.core.parser.BlockquoteType
+import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
+import com.jjrodcast.textkit.editor.core.parser.BaseText
+import com.jjrodcast.textkit.editor.core.parser.Blockquote
+import com.jjrodcast.textkit.editor.core.parser.BulletedList
+import com.jjrodcast.textkit.editor.core.parser.ListItem
+import com.jjrodcast.textkit.editor.core.parser.OrderedList
+import com.jjrodcast.textkit.editor.core.parser.TaskList
+import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
@@ -60,13 +67,36 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
         val filteredContent = if (this.isViewer) {
             textEditorDocument.content
         } else {
-            textEditorDocument.content.filter { it.type != BlockquoteType.Blockquote }
+            // The editor has no blockquote editing, so the node itself cannot survive, but its
+            // paragraphs can: unwrap them in place of dropping the whole block, or opening a
+            // document for editing silently deletes every quoted line.
+            textEditorDocument.content.flatMap { it.unwrapBlockquotes() }
         }
         val document = TextEditorConverter.getAsTextWithMarks(
             TextEditorDocument(filteredContent),
             configuration
         )
         pieceTable.build(document)
+    }
+
+    /**
+     * Replaces a blockquote (at any nesting depth) with the blocks it contains. Recurses into list
+     * items too: a blockquote inside a `listItem`/`taskItem` would otherwise survive to the piece
+     * table, render its text in the editor, and still be dropped by the export — content the user
+     * can see but that never saves.
+     */
+    private fun BaseParagraph.unwrapBlockquotes(): List<BaseParagraph> = when (this) {
+        is Blockquote -> content.flatMap { it.unwrapBlockquotes() }
+        is BulletedList -> listOf(copy(content = content.map { it.unwrapInsideItem() }))
+        is OrderedList -> listOf(copy(content = content.map { it.unwrapInsideItem() }))
+        is TaskList -> listOf(copy(content = content.map { it.unwrapInsideItem() }))
+        else -> listOf(this)
+    }
+
+    private fun BaseText.unwrapInsideItem(): BaseText = when (this) {
+        is ListItem -> copy(content = content.flatMap { it.unwrapBlockquotes() })
+        is TaskListItem -> copy(content = content.flatMap { it.unwrapBlockquotes() })
+        else -> this
     }
 
     override fun fromDocument(document: TextEditorDocumentModel) {
