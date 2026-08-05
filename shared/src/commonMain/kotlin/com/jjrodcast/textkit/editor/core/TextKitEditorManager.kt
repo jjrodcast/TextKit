@@ -294,8 +294,11 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
     ): TextRange = insertToken(MentionType.Mention, id, label, replaceRange, marks)
 
     /**
-     * Deletes the characters in [range]. Used to remove an atomic mention as a whole. Returns the
-     * collapsed [TextRange] where the caret should land (the start of the deleted range).
+     * Deletes the text in [range] through the decorator-aware removal path. The effective window
+     * can grow beyond [range]: when the deletion would otherwise clip a list marker, the path
+     * swallows the marker whole and renumbers the remaining items. Used to remove an atomic
+     * mention as a whole. Returns the collapsed [TextRange] the removal path places the caret at —
+     * normally the start of the deleted range.
      */
     fun deleteRange(range: TextRange): TextRange {
         if (range.length <= 0) return TextRange(range.min)
