@@ -298,8 +298,17 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
      * collapsed [TextRange] where the caret should land (the start of the deleted range).
      */
     fun deleteRange(range: TextRange): TextRange {
-        if (range.length > 0) transaction.delete(range.min, range.length)
-        return TextRange(range.min)
+        if (range.length <= 0) return TextRange(range.min)
+        // Routed through the text-removal path rather than deleting the pieces outright — the same
+        // reasoning as removeEmbedAt: a raw delete whose window swallows a paragraph's trailing
+        // line break merges the following paragraph into this one, stranding that paragraph's
+        // decorator mid-line. The text path resolves decorators for the removal window (#74, #82).
+        val action = TextEditorAction.TextRemoved(
+            offset = range.min,
+            length = range.length,
+            selection = TextRange(range.min),
+        )
+        return TextTransaction.onTextUpdated(action, this).second
     }
 
     // region Embedded blocks (tables, images, documents, …)
