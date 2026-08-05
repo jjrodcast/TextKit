@@ -12,10 +12,11 @@ import kotlin.test.assertTrue
 
 /**
  * Deterministic stress test: long, seeded sequences of every editing operation — typing, breaks,
- * deletes, replaces, multiline pastes, list toggles and type switches, styles, alignment and colour
- * — over regular paragraphs, ordered/unordered/task lists, deeply nested documents, and the
- * flattened forms headings and blockquotes load into (#115). This is the kind of churn that
- * surfaces an intermittent editing bug.
+ * deletes (typed and programmatic `deleteRange`), replaces, multiline pastes, list toggles and type
+ * switches, styles, alignment, colour, embed updates, and the read-only selection queries — over
+ * regular paragraphs, ordered/unordered/task lists, deeply nested documents, and the flattened
+ * forms headings and blockquotes load into (#115). This is the kind of churn that surfaces an
+ * intermittent editing bug.
  *
  * After every operation, six invariants hold:
  *
@@ -100,8 +101,8 @@ internal object EditingStress {
     /** Decides the next operation from [rng] and returns its description plus a thunk that runs it. */
     internal fun decideOp(editor: TextKitEditorManager, rng: Random): Pair<String, () -> Unit> {
         val len = editor.text.length
-        // 17 values for 16 explicit branches plus the colour op in `else`.
-        return when (rng.nextInt(17)) {
+        // 20 values for 19 explicit branches plus the colour op in `else`.
+        return when (rng.nextInt(20)) {
             0 -> {
                 val at = rng.nextInt(len + 1)
                 val text = randomText(rng)
@@ -209,6 +210,32 @@ internal object EditingStress {
                 "unembed @$at" to { editor.removeEmbedAt(embed.range); Unit }
             }
 
+            16 -> {
+                // The programmatic delete callers use — a separate entry point from deleteText.
+                val range = randomRange(rng, len)
+                "deleteRange $range" to { editor.deleteRange(range); Unit }
+            }
+
+            17 -> {
+                // Replaces the block payload behind an existing placeholder in place.
+                val at = if (len == 0) 0 else rng.nextInt(len)
+                val embed = editor.embedAt(at) ?: return "updateEmbed <none>" to {}
+                "updateEmbed @$at" to { editor.updateEmbedAt(embed.range, TABLE_BLOCK_ALT); Unit }
+            }
+
+            18 -> {
+                // Read-only queries the UI fires on every selection change: none may throw on any
+                // reachable state (a throw here is a crash in a real app).
+                val range = randomRange(rng, len)
+                "queries $range" to {
+                    editor.getLink(range.min, range.max)
+                    editor.getSearchMarkType(range)
+                    editor.checkDecorator(range.min, range.max)
+                    editor.marksAt(range)
+                    Unit
+                }
+            }
+
             else -> {
                 val range = randomRange(rng, len)
                 val color = if (rng.nextBoolean()) "#ff0000" else null
@@ -255,6 +282,8 @@ internal object EditingStress {
     private const val ALPHABET = "abc de"
 
     private const val TABLE_BLOCK = """{"type":"table","content":[{"type":"tableRow","content":[]}]}"""
+
+    private const val TABLE_BLOCK_ALT = """{"type":"table","content":[]}"""
 
     private val LIST_TYPES = listOf(
             TextEditorListItem.NumberedList,
