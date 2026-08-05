@@ -66,9 +66,12 @@ internal object PositionalListItemUtils {
         queue.add(root)
         while (queue.isNotEmpty()) {
             val item = queue.removeAt(0)
-            val decorator = item.richPiece.decorator?.copyValue(level = item.getLevel(0) + 1)
-            item.newRichPiece = item.richPiece.copy(decorator = decorator, length = decorator.createDecoratorString().length)
             queue.addAll(item.positionalListItems)
+            // A paragraph without a decorator (plain text, an embed placeholder) has no level to
+            // change. Building newRichPiece from the null decorator's empty string produces a
+            // zero-length piece whose Update transaction DELETES the paragraph's text.
+            val decorator = item.richPiece.decorator?.copyValue(level = item.getLevel(0) + 1) ?: continue
+            item.newRichPiece = item.richPiece.copy(decorator = decorator, length = decorator.createDecoratorString().length)
         }
     }
 
@@ -83,9 +86,11 @@ internal object PositionalListItemUtils {
         queue.add(root)
         while (queue.isNotEmpty()) {
             val item = queue.removeAt(0)
-            val decorator = item.richPiece.decorator?.copyValue(level = level ?: (item.getLevel() - 1))
-            item.newRichPiece = item.richPiece.copy(decorator = decorator, length = decorator.createDecoratorString().length)
             queue.addAll(item.positionalListItems)
+            // Same guard as increaseLevel: a decorator-less paragraph has no level, and the empty
+            // piece fabricated from a null decorator turns into a text-deleting Update.
+            val decorator = item.richPiece.decorator?.copyValue(level = level ?: (item.getLevel() - 1)) ?: continue
+            item.newRichPiece = item.richPiece.copy(decorator = decorator, length = decorator.createDecoratorString().length)
         }
     }
 

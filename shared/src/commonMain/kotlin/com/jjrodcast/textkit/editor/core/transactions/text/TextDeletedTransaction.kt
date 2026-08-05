@@ -132,7 +132,13 @@ internal object TextDeletedTransaction {
         val deleteTransaction = TextTransactionsUtils.deleteTransaction(offset, length)
         transactions.add(deleteTransaction)
 
+        // The reorder decides from the PRE-delete lines, so it can emit an update for a decorator
+        // that lies inside the (possibly decorator-extended) delete window — a decorator the delete
+        // is removing. Applied together the two overlap and the delete carves through the freshly
+        // written marker, leaving a fragment mid-line. A transaction targeting the deleted window
+        // can never be meaningful; the surviving items' updates all target offsets outside it.
         val nextParagraphsTransactions = reorderListItemsOnUpdate(lines)
+            .filter { it.offsetInDocument < offset || it.offsetInDocument >= offset + length }
         transactions.addAll(nextParagraphsTransactions)
 
         return Pair(TextRange(offset), transactions)
