@@ -400,12 +400,13 @@ internal object ListItemTransaction {
         val newPositionalListItems = ListsConverter.fromPositionalListItems(startItems + prevElements + itemsWithChangedLevels)
         val flattenItems = PositionalListItemUtils.reorderItems(items = newPositionalListItems)
 
-        // Recover the newly decorated paragraphs by their document index — the flat list's layout
-        // is not positionally stable after reorderItems restructures the tree (a selection ending
-        // inside a following item's decorator shifted the layout, handing that item an Insert and
-        // stacking a second decorator onto it).
-        val insertIndices = nextElements.mapNotNull { if (it.richPiece.decorator == null) it.index else null }.toSet()
-        val selectedParagraphs = flattenItems.filter { it.index in insertIndices }
+        // Recover the newly decorated paragraphs by their DOCUMENT OFFSET — the only key stable
+        // across the rebuild. `index` is not: fromPositionalListItems re-indexes sequentially, and
+        // the task-list items handled separately above are absent from the rebuilt list, so the
+        // indices shift (a newly decorated paragraph after a task item then missed its Insert and
+        // fell to an Update that replaced its leading characters with the marker).
+        val insertOffsets = nextElements.mapNotNull { if (it.richPiece.decorator == null) it.offsetInDocument else null }.toSet()
+        val selectedParagraphs = flattenItems.filter { it.offsetInDocument in insertOffsets }
         val transactions = flattenItems.createTransactions(selectedParagraphs)
         val newRange = ListItemTextEditorRangeUtils.getTextEditorRangeForMultiRange(flattenItems, selectedIndices, range)
         return Pair(transactions, newRange)

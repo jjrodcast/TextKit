@@ -121,6 +121,14 @@ internal object TextDeletedTransaction {
             if (!wouldOrphanOpeningDecorator) {
                 offset += decorSkip
                 length = maxOf(length - decorSkip, 0)
+            } else {
+                // Same left-extension as deleteTextAndDecorator: the item is going away whole, so
+                // never let the window start mid-decorator and shear the marker piece.
+                val extendLeft = offset - firstParagraph.startOffset
+                if (extendLeft > 0) {
+                    offset -= extendLeft
+                    length += extendLeft
+                }
             }
         }
 
@@ -181,8 +189,14 @@ internal object TextDeletedTransaction {
             val wouldOrphanOpeningDecorator = decorSkip > 0 &&
                 actionModel.length >= text.length - actionModel.offset
             if (wouldOrphanOpeningDecorator) {
-                val deleteTransaction = TextTransactionsUtils.deleteTransaction(actionModel.offset, actionModel.length)
-                Pair(TextRange(actionModel.offset), listOf(deleteTransaction))
+                // The delete reaches the end of the document, so the item goes as a whole. Extend
+                // the window LEFT to the decorator's start: a window that begins mid-decorator
+                // would otherwise shear the atomic marker piece and leave a truncated remnant
+                // ("\t") that surfaces mid-line on the next edit.
+                val start = minOf(actionModel.offset, paragraph.startOffset)
+                val length = actionModel.offset + actionModel.length - start
+                val deleteTransaction = TextTransactionsUtils.deleteTransaction(start, length)
+                Pair(TextRange(start), listOf(deleteTransaction))
             } else {
                 val newOffset = actionModel.offset + decorSkip
                 val newLength = maxOf(actionModel.length - decorSkip, 0)
