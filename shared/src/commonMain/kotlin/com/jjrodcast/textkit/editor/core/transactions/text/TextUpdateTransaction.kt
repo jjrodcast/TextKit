@@ -128,8 +128,12 @@ internal object TextUpdateTransaction {
         val deleteTransaction = updateTransaction(offset, model, length)
         transactions.add(deleteTransaction)
 
-        // Update next items
+        // Same rule as TextDeletedTransaction: the reorder decides from the PRE-replace lines, so
+        // it can emit an update for a decorator inside the (decorator-extended) removal window —
+        // a marker this replace is removing. Applied together the two overlap and leave a marker
+        // fragment mid-line; updates for surviving items all target offsets outside the window.
         val nextParagraphsTransactions = reorderListItemsOnUpdate(lines)
+            .filter { it.offsetInDocument < offset || it.offsetInDocument >= offset + length }
         transactions.addAll(nextParagraphsTransactions)
 
         return Pair(TextRange(offset + actionModel.text.length), transactions)

@@ -12,6 +12,8 @@ import kotlin.test.Test
  * - #122: a delete starting inside a marker sheared the atomic decorator piece, and a list toggle
  *   whose selection ended inside an embed placeholder replaced the placeholder's characters with
  *   the marker (Insert/Update membership keyed on re-indexed positions).
+ * - #124: a replace across list items — the reorder's update targeting a marker inside the
+ *   replace's removal window, the overlap #121 fixed on the delete path.
  */
 class EditingStressKnownSeedsTest {
 
@@ -26,6 +28,13 @@ class EditingStressKnownSeedsTest {
     fun seeds_that_reproduced_issue_122_stay_clean() {
         intArrayOf(44852, 45717, 47417, 57326, 66142, 69496).forEach { seed ->
             EditingStress.run(seed..seed, 60)
+        }
+    }
+
+    @Test
+    fun seeds_that_reproduced_issue_124_stay_clean() {
+        intArrayOf(83626, 103174, 107802, 125854, 127674).forEach { seed ->
+            EditingStress.run(seed..seed, 100)
         }
     }
 }

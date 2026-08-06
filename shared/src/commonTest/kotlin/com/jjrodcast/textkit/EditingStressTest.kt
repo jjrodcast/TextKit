@@ -5,6 +5,7 @@ import com.jjrodcast.textkit.editor.components.TextEditorListItem
 import com.jjrodcast.textkit.editor.components.TextEditorStyleItem
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,7 +19,7 @@ import kotlin.test.assertTrue
  * forms headings and blockquotes load into (#115). This is the kind of churn that surfaces an
  * intermittent editing bug.
  *
- * After every operation, six invariants hold:
+ * After every operation, seven invariants hold:
  *
  * 1. No operation throws (#82, #89, #95).
  * 2. A decorator piece only ever sits at the start of its paragraph — a mid-line decorator is the
@@ -30,6 +31,9 @@ import kotlin.test.assertTrue
  *    #87, #93, #99).
  * 6. The HTML and Markdown exporters accept every reachable state — `toJson` was the only exporter
  *    the sweep exercised before.
+ * 7. Every marker piece is exactly its decorator's canonical string (#122, #124) — a sheared or
+ *    stale-length marker at a paragraph start is invisible to the mid-line check until a later
+ *    edit moves it, which is why #122's failures surfaced ops away from their cause.
  *
  * A failure names the seed, step and operation, so a "random, can't reproduce" error becomes an
  * exact repro. The committed size keeps the run inside a couple of seconds on every target; raising
@@ -81,6 +85,19 @@ internal object EditingStress {
                 paragraph.children.drop(1).none { it.decorator != null },
                 "mid-line decorator at $where: $visible",
             )
+            // 7. A marker piece is exactly its decorator's canonical string. A partial overwrite
+            // (a shear, a stale-length rewrite) can leave a truncated marker AT a paragraph start,
+            // where the mid-line check cannot see it until a later edit moves it — #122's failures
+            // surfaced ops away from their cause for exactly this reason.
+            paragraph.children.forEach { child ->
+                child.decorator?.let { decorator ->
+                    assertEquals(
+                        decorator.createDecoratorString(),
+                        child.text,
+                        "sheared or rewritten marker at $where: $visible",
+                    )
+                }
+            }
         }
         val once = toJson()
         assertTrue(!once.contains("\\t"), "decorator text leaked into the export at $where: $once")
@@ -95,6 +112,27 @@ internal object EditingStress {
             toMarkdown()
         } catch (t: Throwable) {
             throw AssertionError("exporter threw at $where: ${t::class.simpleName}: ${t.message}", t)
+        }
+    }
+
+    /**
+     * The contract on every op that reports a caret: in bounds, and never strictly inside a list
+     * marker's span — a caret in the marker means the next keystroke types into the marker.
+     */
+    private fun TextKitEditorManager.assertCaret(caret: TextRange, what: String) {
+        assertTrue(
+            caret.min >= 0 && caret.max <= text.length,
+            "$what returned an out-of-bounds caret $caret (len=${text.length})",
+        )
+        getParagraphs().forEach { paragraph ->
+            paragraph.children.forEach { child ->
+                if (child.decorator != null) {
+                    assertTrue(
+                        caret.min <= child.start || caret.min >= child.end,
+                        "$what left the caret inside a marker: $caret in [${child.start},${child.end})",
+                    )
+                }
+            }
         }
     }
 
@@ -187,14 +225,17 @@ internal object EditingStress {
                 // Tokens replace the trigger text the caller matched, which always lies inside one
                 // paragraph's own content — never across a decorator.
                 val range = contentRange(editor, rng) ?: return "mention <no content>" to {}
-                "mention $range" to { editor.insertMention(id = "u1", label = "Jorge", replaceRange = range); Unit }
+                "mention $range" to {
+                    val caret = editor.insertMention(id = "u1", label = "Jorge", replaceRange = range)
+                    editor.assertCaret(caret, "insertMention")
+                }
             }
 
             13 -> {
                 val range = contentRange(editor, rng) ?: return "hashtag <no content>" to {}
                 "hashtag $range" to {
-                    editor.insertToken(nodeType = "hashtag", id = "h1", label = "kt", replaceRange = range)
-                    Unit
+                    val caret = editor.insertToken(nodeType = "hashtag", id = "h1", label = "kt", replaceRange = range)
+                    editor.assertCaret(caret, "insertToken")
                 }
             }
 
@@ -213,7 +254,12 @@ internal object EditingStress {
             16 -> {
                 // The programmatic delete callers use — a separate entry point from deleteText.
                 val range = randomRange(rng, len)
-                "deleteRange $range" to { editor.deleteRange(range); Unit }
+                "deleteRange $range" to {
+                    val caret = editor.deleteRange(range)
+                    // A collapsed range is a no-op that returns its input verbatim — the caller's
+                    // caret may already sit anywhere; only a real deletion owes a clamped caret.
+                    if (range.length > 0) editor.assertCaret(caret, "deleteRange")
+                }
             }
 
             17 -> {
