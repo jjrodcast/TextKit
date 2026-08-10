@@ -57,6 +57,16 @@ internal fun JsonElement.embedType(): String =
     jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: EmbedTokenType
 
 /**
+ * Reads `attrs.url` from an embed's raw JSON, or null when the payload has no attrs, no url, or is
+ * not valid JSON at all. Producers put the content's location here (an `image` node's source, a
+ * `document` node's file); the editor never interprets it beyond display.
+ */
+internal fun embedUrlOf(payload: String): String? = runCatching {
+    TEXT_EDITOR_JSON.parseToJsonElement(payload)
+        .jsonObject["attrs"]?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
+/**
  * Human-readable, display-only label for a placeholder (e.g. `📊 Tabla 1`). [indexByType] numbers
  * embeds of the same type in document order. This is what the user sees in the editor; the real
  * content lives in the payload.
