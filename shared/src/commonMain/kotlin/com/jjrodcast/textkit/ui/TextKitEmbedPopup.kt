@@ -46,10 +46,14 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import coil3.compose.SubcomposeAsyncImage
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
+import com.jjrodcast.textkit.editor.core.parser.embedNameOf
 import com.jjrodcast.textkit.editor.core.parser.embedUrlOf
 import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
@@ -58,6 +62,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import textkit.shared.generated.resources.Res
 import textkit.shared.generated.resources.close_text
+import textkit.shared.generated.resources.open_label
 import textkit.shared.generated.resources.remove_label
 import textkit.shared.generated.resources.text_kit_banner
 import kotlin.math.roundToInt
@@ -85,9 +90,14 @@ fun TextKitEmbedPopup(
     onClose: () -> Unit = { state.dismissEmbedPopup() },
     onRemove: () -> Unit = { state.removeActiveEmbed() },
     onSync: (String) -> Unit = { state.updateActiveEmbed(it) },
+    onOpenDocument: ((url: String) -> Unit)? = null,
 ) {
     val embed = state.activeEmbed ?: return
     val anchor = state.activeEmbedBoundingBox() ?: return
+    // Documents delegate opening to the host app; when it provides no handler, hand the url to the
+    // platform (browser tab / system viewer) via Compose's UriHandler.
+    val uriHandler = LocalUriHandler.current
+    val openDocument: (String) -> Unit = { url -> onOpenDocument?.invoke(url) ?: uriHandler.openUri(url) }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -125,6 +135,7 @@ fun TextKitEmbedPopup(
             onClose = onClose,
             onRemove = onRemove,
             onSync = onSync,
+            onOpenDocument = openDocument,
             onDrag = { state.dragEmbedPopup(it) },
             maxHeight = availableHeight,
             modifier = Modifier
@@ -140,6 +151,7 @@ private fun EmbedPopupContent(
     onClose: () -> Unit,
     onRemove: () -> Unit,
     onSync: (String) -> Unit,
+    onOpenDocument: (String) -> Unit,
     onDrag: (Offset) -> Unit,
     maxHeight: Dp,
     modifier: Modifier = Modifier,
@@ -237,6 +249,46 @@ private fun EmbedPopupContent(
                         rawJson = embed.rawJson,
                         onSync = onSync,
                     )
+
+                    // View-only (#127): a card from the node's attributes; opening is delegated to
+                    // the host app (or the platform) rather than bundling a document renderer.
+                    EmbedTypes.Document -> {
+                        val url = remember(embed.rawJson) { embedUrlOf(embed.rawJson) }
+                        val name = remember(embed.rawJson) { embedNameOf(embed.rawJson) } ?: embed.label
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Description,
+                                contentDescription = null,
+                                tint = TextKitTheme.colors.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp).padding(end = 8.dp),
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (url != null) {
+                                    Text(
+                                        text = url,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextKitTheme.colors.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            if (url != null) {
+                                TextButton(onClick = { onOpenDocument(url) }) {
+                                    Text(stringResource(Res.string.open_label))
+                                }
+                            }
+                        }
+                    }
 
                     // Any other embed: show the stored JSON so it is at least inspectable.
                     else -> {

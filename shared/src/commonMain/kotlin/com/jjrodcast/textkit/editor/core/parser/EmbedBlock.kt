@@ -61,9 +61,19 @@ internal fun JsonElement.embedType(): String =
  * not valid JSON at all. Producers put the content's location here (an `image` node's source, a
  * `document` node's file); the editor never interprets it beyond display.
  */
-internal fun embedUrlOf(payload: String): String? = runCatching {
+internal fun embedUrlOf(payload: String): String? = embedAttrOf(payload, "url")
+
+/** Reads `attrs.name` from an embed's raw JSON — a `document` node's display name. */
+internal fun embedNameOf(payload: String): String? = embedAttrOf(payload, "name")
+
+/**
+ * Reads one string attribute from an embed's raw JSON, or null when the payload has no attrs, no
+ * such key, a blank value, or is not valid JSON at all — embeds are an opaque passthrough, so a
+ * malformed payload degrades to "attribute absent", never to an exception.
+ */
+private fun embedAttrOf(payload: String, key: String): String? = runCatching {
     TEXT_EDITOR_JSON.parseToJsonElement(payload)
-        .jsonObject["attrs"]?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+        .jsonObject["attrs"]?.jsonObject?.get(key)?.jsonPrimitive?.contentOrNull
 }.getOrNull()?.takeIf { it.isNotBlank() }
 
 /**
