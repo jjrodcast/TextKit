@@ -46,8 +46,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.CircularProgressIndicator
+import coil3.compose.SubcomposeAsyncImage
 import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
+import com.jjrodcast.textkit.editor.core.parser.embedUrlOf
 import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
 import com.jjrodcast.textkit.ui.table.TextKitEditableTable
@@ -192,12 +195,43 @@ private fun EmbedPopupContent(
             // its own scroll handles anything taller than the capped popup.
             Box(modifier = Modifier.weight(1f, fill = false)) {
                 when (embed.embedType) {
-                    EmbedTypes.Image -> Image(
-                        painter = painterResource(Res.drawable.text_kit_banner),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
-                    )
+                    // View-only (#127): the node's attrs.url is the content's source. While it
+                    // loads a spinner holds the space; a missing or failing url falls back to the
+                    // banner so the popup never renders empty.
+                    EmbedTypes.Image -> {
+                        val url = remember(embed.rawJson) { embedUrlOf(embed.rawJson) }
+                        if (url == null) {
+                            Image(
+                                painter = painterResource(Res.drawable.text_kit_banner),
+                                contentDescription = embed.label,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+                            )
+                        } else {
+                            SubcomposeAsyncImage(
+                                model = url,
+                                contentDescription = embed.label,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+                                loading = {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator()
+                                    }
+                                },
+                                error = {
+                                    Image(
+                                        painter = painterResource(Res.drawable.text_kit_banner),
+                                        contentDescription = embed.label,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
 
                     EmbedTypes.Table -> TextKitEditableTable(
                         rawJson = embed.rawJson,

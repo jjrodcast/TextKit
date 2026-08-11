@@ -66,9 +66,11 @@ private val DEMO_TABLE_JSON = """
     ]}
 """.trimIndent()
 
-// A demo local image embed. `src` names the bundled drawable (text_kit_banner.png); the popup maps it
-// to Res.drawable.text_kit_banner. Stored verbatim and round-tripped like any other embed.
-private const val DEMO_IMAGE_JSON = """{"type":"image","attrs":{"src":"text_kit_banner"}}"""
+// A demo image embed. The popup loads `attrs.url` (the producers' contract, #127) — this points at
+// the repo's own banner so the demo needs no third-party host; without a network the popup falls
+// back to the bundled banner drawable. Stored verbatim and round-tripped like any other embed.
+private const val DEMO_IMAGE_JSON =
+    """{"type":"image","attrs":{"url":"https://raw.githubusercontent.com/jjrodcast/TextKit/main/shared/src/commonMain/composeResources/drawable/text_kit_banner.png"}}"""
 
 // A demo document embed. Stored verbatim on the placeholder piece and re-emitted on toJson(); the
 // editor shows the "📄 Documento" chip and the popup renders this JSON (there is no custom document
