@@ -203,14 +203,14 @@ private fun EmbedPopupContent(
                         if (url == null) {
                             Image(
                                 painter = painterResource(Res.drawable.text_kit_banner),
-                                contentDescription = null,
+                                contentDescription = embed.label,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                             )
                         } else {
                             SubcomposeAsyncImage(
                                 model = url,
-                                contentDescription = null,
+                                contentDescription = embed.label,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                                 loading = {
@@ -224,7 +224,7 @@ private fun EmbedPopupContent(
                                 error = {
                                     Image(
                                         painter = painterResource(Res.drawable.text_kit_banner),
-                                        contentDescription = null,
+                                        contentDescription = embed.label,
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                                     )
