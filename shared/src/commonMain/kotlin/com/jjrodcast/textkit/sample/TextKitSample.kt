@@ -73,8 +73,8 @@ private const val DEMO_IMAGE_JSON =
     """{"type":"image","attrs":{"url":"https://raw.githubusercontent.com/jjrodcast/TextKit/main/shared/src/commonMain/composeResources/drawable/text_kit_banner.png"}}"""
 
 // A demo document embed. Stored verbatim on the placeholder piece and re-emitted on toJson(); the
-// editor shows the "📄 Documento" chip and the popup renders this JSON (there is no custom document
-// renderer, so it falls back to showing the stored attrs).
+// editor shows the "📄 Documento" chip and the popup renders a card from attrs (name + url) with an
+// Open action that hands the url to the host app or the platform (#127).
 private const val DEMO_DOCUMENT_JSON =
     """{"type":"document","attrs":{"name":"Reporte Q3.pdf","url":"https://example.com/reporte-q3.pdf"}}"""
 
