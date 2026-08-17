@@ -67,10 +67,13 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
         val filteredContent = if (this.isViewer) {
             textEditorDocument.content
         } else {
-            // The editor has no blockquote editing, so the node itself cannot survive, but its
-            // paragraphs can: unwrap them in place of dropping the whole block, or opening a
-            // document for editing silently deletes every quoted line.
-            textEditorDocument.content.flatMap { it.unwrapBlockquotes() }
+            // Top-level blockquotes survive an editor load the same way they do in the viewer
+            // (#126) — their content pieces carry the BlockquoteDecorator attribute, and the
+            // export groups them back into blockquote nodes. A blockquote nested inside a
+            // listItem/taskItem still unwraps into its item's paragraphs: the list machinery has
+            // no representation for it, and an un-unwrapped nested quote renders but never saves
+            // (#120's sibling case).
+            textEditorDocument.content.map { it.unwrapNestedBlockquotes() }
         }
         val document = TextEditorConverter.getAsTextWithMarks(
             TextEditorDocument(filteredContent),
@@ -80,22 +83,27 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
     }
 
     /**
-     * Replaces a blockquote (at any nesting depth) with the blocks it contains. Recurses into list
-     * items too: a blockquote inside a `listItem`/`taskItem` would otherwise survive to the piece
-     * table, render its text in the editor, and still be dropped by the export — content the user
-     * can see but that never saves.
+     * Unwraps blockquotes nested inside list items into their item's paragraphs — the list
+     * machinery has no representation for a quote, and an un-unwrapped nested quote renders in the
+     * editor but never saves. Top-level blockquotes are left intact (#126): their content carries
+     * the decorator attribute and round-trips.
      */
-    private fun BaseParagraph.unwrapBlockquotes(): List<BaseParagraph> = when (this) {
-        is Blockquote -> content.flatMap { it.unwrapBlockquotes() }
-        is BulletedList -> listOf(copy(content = content.map { it.unwrapInsideItem() }))
-        is OrderedList -> listOf(copy(content = content.map { it.unwrapInsideItem() }))
-        is TaskList -> listOf(copy(content = content.map { it.unwrapInsideItem() }))
-        else -> listOf(this)
+    private fun BaseParagraph.unwrapNestedBlockquotes(): BaseParagraph = when (this) {
+        is BulletedList -> copy(content = content.map { it.unwrapInsideItem() })
+        is OrderedList -> copy(content = content.map { it.unwrapInsideItem() })
+        is TaskList -> copy(content = content.map { it.unwrapInsideItem() })
+        else -> this
+    }
+
+    /** Flattens a blockquote (at any depth) into the blocks it contains — nested-in-list use only. */
+    private fun BaseParagraph.flattenBlockquotes(): List<BaseParagraph> = when (this) {
+        is Blockquote -> content.flatMap { it.flattenBlockquotes() }
+        else -> listOf(unwrapNestedBlockquotes())
     }
 
     private fun BaseText.unwrapInsideItem(): BaseText = when (this) {
-        is ListItem -> copy(content = content.flatMap { it.unwrapBlockquotes() })
-        is TaskListItem -> copy(content = content.flatMap { it.unwrapBlockquotes() })
+        is ListItem -> copy(content = content.flatMap { it.flattenBlockquotes() })
+        is TaskListItem -> copy(content = content.flatMap { it.flattenBlockquotes() })
         else -> this
     }
 

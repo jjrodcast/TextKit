@@ -23,7 +23,10 @@ internal object PositionalListItemUtils {
         val items = ListsConverter.convertToLocalListItems(lines)
         val level = lines.paragraphsInSelectedRange.first().startPiece.decorator.toLevel()
         items.fastForEach {
-            if (it.index in indices) {
+            // Only real marker pieces switch type: fabricating a marker onto a content head (a
+            // quoted or plain paragraph caught in the range, #126) replaces its text with the
+            // marker string.
+            if (it.index in indices && it.richPiece.isDecorator) {
                 val count = it.richPiece.decorator?.toCount() ?: 0
                 it.newRichPiece = it.richPiece.copy(decorator = listItem.toTextDecoratorModel(count, level))
             }
@@ -37,7 +40,8 @@ internal object PositionalListItemUtils {
         val targetOffset = lines.paragraphs[index].startOffset
         val items = ListsConverter.fromPieceMultiParagraph(MultiPieceParagraph(paragraphs, lines.start, lines.end))
         items.fastForEach {
-            if (it.offsetInDocument == targetOffset) {
+            // Same marker guard as replaceDecorators (#126).
+            if (it.offsetInDocument == targetOffset && it.richPiece.isDecorator) {
                 val count = it.richPiece.decorator?.toCount() ?: 0
                 it.newRichPiece = it.richPiece.copy(decorator = listItem.toTextDecoratorModel(count, level))
             }

@@ -27,7 +27,11 @@ internal data class TextEditorModel(
 
     companion object {
 
-        internal fun TextEditorModel?.getKey(): String = if (this?.piece?.decorator != null) this.piece.decorator.key else NONE_KEY
+        // Marker keys only: the key groups consecutive same-kind LIST paragraphs into one node.
+        // A blockquote decorator is a paragraph attribute, and letting its key group adjacent
+        // quoted paragraphs would collapse them into one node that keeps only the first paragraph.
+        internal fun TextEditorModel?.getKey(): String =
+            this?.piece?.decorator?.takeIf { it.isMarker }?.key ?: NONE_KEY
 
         fun create(
             text: String,

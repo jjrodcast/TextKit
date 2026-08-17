@@ -49,7 +49,9 @@ internal data class PieceParagraph(
 
     val piecesOutOfRange get() = piecesPartitioned.second
 
-    val isListItem get() = startPiece.decorator != null
+    // Marker-based: a quoted paragraph (blockquote attribute on its content pieces) is not a list
+    // item — it has no marker piece to skip, renumber or protect.
+    val isListItem get() = startPiece.isDecorator
 
     val paragraphType get() = startPiece.decorator.toTextEditorListItem()
 

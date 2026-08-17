@@ -5,12 +5,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Loading a document for editing must not lose blockquote content.
- *
- * `loadWith` used to drop blockquote nodes wholesale in editor mode — the node *and* every
- * paragraph inside it — so opening a document with a quote and saving it deleted the quoted text.
- * The editor still cannot edit a blockquote, so the node degrades to its inner paragraphs: the
- * quote structure is lost (as it always was), but the text now survives.
+ * Loading a document for editing must not lose blockquote content (#115). Top-level quotes now
+ * round-trip whole (#126, see `BlockquoteRoundTripTest`); a quote nested inside a list item still
+ * degrades to its item's paragraphs — the list machinery has no representation for it — but the
+ * text always survives.
  */
 class BlockquoteEditorLoadTest {
 

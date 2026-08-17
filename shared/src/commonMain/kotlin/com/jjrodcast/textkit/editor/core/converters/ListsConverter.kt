@@ -3,6 +3,7 @@ package com.jjrodcast.textkit.editor.core.converters
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
 import com.jjrodcast.textkit.editor.core.converters.utils.flatten
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
+import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.utils.fastForEach
 import com.jjrodcast.textkit.editor.utils.fastMapIndexed
 
@@ -10,10 +11,19 @@ internal object ListsConverter {
 
     internal fun fromPieceMultiParagraph(multiparagraphs: MultiPieceParagraph): List<PositionalListItem> {
         val localListItems = multiparagraphs.paragraphs.fastMapIndexed { index, paragraph ->
-            PositionalListItem(index = index, richPiece = paragraph.startPiece, offsetInDocument = paragraph.startOffset)
+            PositionalListItem(index = index, richPiece = paragraph.startPiece.asListHead(), offsetInDocument = paragraph.startOffset)
         }
         return createLists(localListItems)
     }
+
+    /**
+     * The piece the list machinery may treat as a paragraph's head. A non-marker decorator (the
+     * blockquote attribute, #126) is stripped: to every list operation a quoted paragraph is a
+     * plain paragraph — treating its attributed CONTENT piece as a marker renumbers or replaces
+     * the quoted text itself.
+     */
+    private fun RichPiece.asListHead(): RichPiece =
+        if (decorator != null && !decorator.isMarker) copy(decorator = null) else this
 
     internal fun fromPositionalListItems(positionalListItems: List<PositionalListItem>): List<PositionalListItem> {
         val localListItems = positionalListItems.flatten().fastMapIndexed { index, item ->
@@ -24,7 +34,7 @@ internal object ListsConverter {
 
     internal fun convertToLocalListItems(multiparagraphs: MultiPieceParagraph): List<PositionalListItem> {
         return multiparagraphs.paragraphs.fastMapIndexed { index, paragraph ->
-            PositionalListItem(index = index, richPiece = paragraph.startPiece, offsetInDocument = paragraph.startOffset)
+            PositionalListItem(index = index, richPiece = paragraph.startPiece.asListHead(), offsetInDocument = paragraph.startOffset)
         }
     }
 

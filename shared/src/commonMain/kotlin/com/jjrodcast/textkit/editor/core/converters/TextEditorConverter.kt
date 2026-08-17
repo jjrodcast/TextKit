@@ -131,7 +131,14 @@ internal object TextEditorConverter {
             }
 
             is Paragraph -> {
-                if (this.content.isEmpty()) items.add(TextEditorModel.create(EMPTY))
+                // An empty quoted paragraph must keep the blockquote attribute on its (only) piece
+                // or its membership is lost across a reload (#126).
+                if (this.content.isEmpty()) items.add(
+                    TextEditorModel.create(
+                        EMPTY,
+                        decorator = decorator as? TextDecoratorModel.BlockquoteDecorator
+                    )
+                )
                 else {
                     this.content.fastForEach { text ->
                         items.addAll(

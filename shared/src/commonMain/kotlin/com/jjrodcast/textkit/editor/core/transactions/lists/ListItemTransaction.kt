@@ -123,7 +123,9 @@ internal object ListItemTransaction {
     }
 
     private fun PieceParagraph.addDecoratorIfNull(currListItem: TextEditorDecoratorItem): PieceParagraph {
-        if (startPiece.decorator != null) return this
+        // Marker check, not raw decorator: a quoted paragraph (blockquote attribute on its content
+        // pieces, #126) is a plain paragraph to the list machinery and gets its marker prepended.
+        if (startPiece.isDecorator) return this
         val level = if (currListItem in listOf(BulletedList, CheckList)) 0 else 1
         val newDecorator = currListItem.toTextDecoratorModel(count = 0, level = level)
         val newModel = TextEditorModel.create(
