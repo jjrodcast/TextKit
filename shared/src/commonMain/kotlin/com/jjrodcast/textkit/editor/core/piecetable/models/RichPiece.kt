@@ -25,7 +25,9 @@ internal data class RichPiece(
     val isLineBreak: Boolean = false,
     val endsWithLineBreak: Boolean = false
 ) : Piece() {
-    val isDecorator get() = decorator != null
+    // Marker pieces only: a blockquote decorator is a paragraph attribute on ordinary content
+    // pieces, not an atomic marker — the editing paths' decorator handling must not apply to it.
+    val isDecorator get() = decorator?.isMarker == true
 
     val isToken get() = token != null
 

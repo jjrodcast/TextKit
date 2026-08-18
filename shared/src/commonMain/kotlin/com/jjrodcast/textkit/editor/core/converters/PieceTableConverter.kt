@@ -7,6 +7,7 @@ import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel.Companion.getKey
 import com.jjrodcast.textkit.editor.core.models.TextEditorParagraphModel
 import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
+import com.jjrodcast.textkit.editor.core.parser.Blockquote
 import com.jjrodcast.textkit.editor.core.parser.BaseText
 import com.jjrodcast.textkit.editor.core.parser.BulletedList
 import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
@@ -262,14 +263,42 @@ internal object PieceTableConverter {
                 elements = elements,
                 startIndex = value,
                 endIndex = nodes[index + 1]
-            )
+            ) to elements[value].isQuoted
         }
         val lastContent = createParagraphModel(
             elements = elements,
             startIndex = nodes.last(),
             endIndex = elements.size
-        )
-        return TextEditorDocument(partialContent + lastContent)
+        ) to elements[nodes.last()].isQuoted
+        return TextEditorDocument(groupBlockquotes(partialContent + lastContent))
+    }
+
+    /** Whether this paragraph's pieces carry the blockquote attribute (#126). */
+    private val PositionalParagraph.isQuoted: Boolean
+        get() = textStyled.any { it.piece.decorator is TextDecoratorModel.BlockquoteDecorator }
+
+    /**
+     * Groups consecutive quoted plain paragraphs back into `blockquote` nodes (#126). Membership is
+     * the blockquote attribute any of the paragraph's pieces carries; adjacency defines the node,
+     * so two blockquotes with nothing between them normalize into one — the same result their
+     * rendering already shows. Only plain paragraphs join a quote; a list or embed ends it.
+     */
+    private fun groupBlockquotes(content: List<Pair<BaseParagraph, Boolean>>): List<BaseParagraph> {
+        val result = arrayListOf<BaseParagraph>()
+        val run = arrayListOf<BaseParagraph>()
+        fun flush() {
+            if (run.isEmpty()) return
+            result.add(Blockquote(content = ArrayList(run)))
+            run.clear()
+        }
+        content.fastForEach { (node, quoted) ->
+            if (quoted && node is Paragraph) run.add(node) else {
+                flush()
+                result.add(node)
+            }
+        }
+        flush()
+        return result
     }
 
     /**
@@ -362,7 +391,10 @@ internal object PieceTableConverter {
         val finalIndices = arrayListOf<Int>()
         while (currentIndex < elements.size) {
             val item = elements[currentIndex]
-            val decorator = item.textStyled.firstOrNull()?.piece?.decorator
+            // Marker decorators only: a blockquote-attributed paragraph is a plain paragraph and
+            // must be its own node — letting the attribute group consecutive quoted paragraphs
+            // collapses them into one node that keeps only the first paragraph's content.
+            val decorator = item.textStyled.firstOrNull()?.piece?.decorator?.takeIf { it.isMarker }
             if (decorator == null) {
                 finalIndices.add(currentIndex)
                 currentIndex += 1

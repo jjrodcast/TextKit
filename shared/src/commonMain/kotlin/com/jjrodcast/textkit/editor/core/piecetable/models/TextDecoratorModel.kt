@@ -27,6 +27,14 @@ sealed class TextDecoratorModel {
         return getDecoratorString().length
     }
 
+    /**
+     * Whether this decorator is a visible MARKER occupying its own atomic piece at the start of a
+     * paragraph (list bullets/numbers/task boxes). A blockquote decorator is the opposite: an
+     * invisible paragraph attribute riding on ordinary content pieces — its text is the quoted
+     * content itself, so the editing paths must treat those pieces as plain text, never as markers.
+     */
+    val isMarker: Boolean get() = this !is BlockquoteDecorator
+
     private fun getDecoratorString() = when (this) {
         is NumberDecoratorModel -> "$count$DOT$SPACE"
         is BulletDecoratorModel -> {
@@ -132,8 +140,10 @@ sealed class TextDecoratorModel {
             }
         }
 
-        internal fun TextDecoratorModel?.toLevel(defaultLevel: Int = 1) = when (this) {
-            null -> defaultLevel
+        internal fun TextDecoratorModel?.toLevel(defaultLevel: Int = 1) = when {
+            // A non-marker decorator (blockquote attribute) has no list level — its -1 sentinel
+            // must never feed level arithmetic, where it indexes the tabs cache negatively.
+            this == null || !isMarker -> defaultLevel
             else -> level
         }
 

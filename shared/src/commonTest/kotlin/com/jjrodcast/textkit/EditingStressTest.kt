@@ -15,9 +15,9 @@ import kotlin.test.assertTrue
  * Deterministic stress test: long, seeded sequences of every editing operation — typing, breaks,
  * deletes (typed and programmatic `deleteRange`), replaces, multiline pastes, list toggles and type
  * switches, styles, alignment, colour, embed updates, and the read-only selection queries — over
- * regular paragraphs, ordered/unordered/task lists, deeply nested documents, and the flattened
- * forms headings and blockquotes load into (#115). This is the kind of churn that surfaces an
- * intermittent editing bug.
+ * regular paragraphs, ordered/unordered/task lists, deeply nested documents, flattened headings
+ * (#115) and live blockquotes (#126 — their paragraphs carry the non-marker quote attribute
+ * through every op). This is the kind of churn that surfaces an intermittent editing bug.
  *
  * After every operation, seven invariants hold:
  *
@@ -81,16 +81,18 @@ internal object EditingStress {
     internal fun TextKitEditorManager.assertInvariants(where: String) {
         val visible = text.replace("\n", "\\n").replace("\t", "\\t")
         getParagraphs().forEach { paragraph ->
+            // Marker decorators only: the blockquote decorator (#126) is an invisible paragraph
+            // attribute riding on ordinary content pieces, legal anywhere in the line.
             assertTrue(
-                paragraph.children.drop(1).none { it.decorator != null },
-                "mid-line decorator at $where: $visible",
+                paragraph.children.drop(1).none { it.decorator?.isMarker == true },
+                "mid-line marker at $where: $visible",
             )
             // 7. A marker piece is exactly its decorator's canonical string. A partial overwrite
             // (a shear, a stale-length rewrite) can leave a truncated marker AT a paragraph start,
             // where the mid-line check cannot see it until a later edit moves it — #122's failures
             // surfaced ops away from their cause for exactly this reason.
             paragraph.children.forEach { child ->
-                child.decorator?.let { decorator ->
+                child.decorator?.takeIf { it.isMarker }?.let { decorator ->
                     assertEquals(
                         decorator.createDecoratorString(),
                         child.text,
@@ -126,7 +128,7 @@ internal object EditingStress {
         )
         getParagraphs().forEach { paragraph ->
             paragraph.children.forEach { child ->
-                if (child.decorator != null) {
+                if (child.decorator?.isMarker == true) {
                     assertTrue(
                         caret.min <= child.start || caret.min >= child.end,
                         "$what left the caret inside a marker: $caret in [${child.start},${child.end})",
