@@ -1,5 +1,9 @@
 package com.jjrodcast.textkit
 
+import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -35,11 +39,11 @@ class BlockquoteRoundTripTest {
         val editor = editorFrom(QUOTE_DOC)
         editor.typeText(editor.text.indexOf("quoted") + 3, "XY")
         val saved = editor.toJson()
-        assertTrue(saved.contains("\"type\":\"blockquote\""))
-        // The typed characters live in the quoted paragraph, so they must serialize inside the node.
-        val quoteStart = saved.indexOf("\"type\":\"blockquote\"")
-        assertTrue(saved.substringBefore("\"type\":\"blockquote\"").contains("before"))
-        assertTrue(saved.contains("quoXYted") || saved.contains("XY"), saved)
+        // The typed characters must serialize INSIDE the blockquote node's subtree, not merely
+        // somewhere in the document.
+        val quote = TEXT_EDITOR_JSON.parseToJsonElement(saved).jsonObject["content"]!!.jsonArray
+            .first { it.jsonObject["type"]?.jsonPrimitive?.content == "blockquote" }
+        assertTrue(quote.toString().contains("XY"), "typed text left the quote: $saved")
         assertEquals(saved, editorFrom(saved).toJson())
     }
 

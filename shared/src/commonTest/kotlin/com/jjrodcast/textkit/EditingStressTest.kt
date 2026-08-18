@@ -85,7 +85,7 @@ internal object EditingStress {
             // attribute riding on ordinary content pieces, legal anywhere in the line.
             assertTrue(
                 paragraph.children.drop(1).none { it.decorator?.isMarker == true },
-                "mid-line decorator at $where: $visible",
+                "mid-line marker at $where: $visible",
             )
             // 7. A marker piece is exactly its decorator's canonical string. A partial overwrite
             // (a shear, a stale-length rewrite) can leave a truncated marker AT a paragraph start,
