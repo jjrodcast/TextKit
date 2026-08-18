@@ -85,7 +85,10 @@ internal object TextUpdateTransaction {
             actionModel.offset > 0 -> marksAtOrEmpty(actionModel.offset - 1)
             else -> emptySet()
         }
-        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = null)
+        // Text landing in a quoted paragraph inherits its quote attribute (#126), the way it
+        // inherits marks — otherwise the continuation of a quote types out unquoted.
+        val quoteDecorator = quoteDecoratorAt(actionModel.offset)
+        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = quoteDecorator)
         val transaction = updateTransaction(actionModel.offset, model, actionModel.removeLength)
         return Pair(TextRange(actionModel.offset + actionModel.text.length), listOf(transaction))
     }
@@ -124,7 +127,8 @@ internal object TextUpdateTransaction {
         }
 
         val marks = marksAtOrEmpty(offset)
-        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = null)
+        val quoteDecorator = quoteDecoratorAt(offset)
+        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = quoteDecorator)
         val deleteTransaction = updateTransaction(offset, model, length)
         transactions.add(deleteTransaction)
 
@@ -173,7 +177,8 @@ internal object TextUpdateTransaction {
         }
 
         val marks = this.marksAtOrEmpty(offset)
-        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = null)
+        val quoteDecorator = quoteDecoratorAt(offset)
+        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = quoteDecorator)
         val updateTransaction = updateTransaction(offset, model, length)
 
         val rangeOffset = offset + actionModel.text.length

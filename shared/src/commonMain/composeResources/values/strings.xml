@@ -22,6 +22,7 @@
     <string name="edit_label">Edit</string>
     <string name="remove_label">Remove</string>
     <string name="open_label">Open</string>
+    <string name="blockquote_text">Quote</string>
     <string name="left_align_text">Left align</string>
     <string name="center_align_text">Center align</string>
     <string name="right_align_text">Right align</string>

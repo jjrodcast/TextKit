@@ -37,4 +37,12 @@ class EditingStressKnownSeedsTest {
             EditingStress.run(seed..seed, 100)
         }
     }
+
+    @Test
+    fun seed_of_the_stale_caret_paste_corruption_stays_clean() {
+        // A break on an empty nested numbered item returned a caret computed for a marker
+        // demotion while the transactions deleted the marker whole; a multiline paste chaining
+        // segments off that caret then wrote past the document end (#126's phase-2 sweep find).
+        EditingStress.run(46382..46382, 60)
+    }
 }

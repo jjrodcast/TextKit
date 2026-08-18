@@ -40,6 +40,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
 import com.jjrodcast.textkit.theme.TextKitTheme
+import com.jjrodcast.textkit.ui.listlayout.BlockquoteEditorOverlay
 import com.jjrodcast.textkit.ui.listlayout.ListItemEditorGutterOverlay
 import com.jjrodcast.textkit.ui.state.TextKitState
 import com.jjrodcast.textkit.ui.state.rememberTextKitState
@@ -118,6 +119,13 @@ fun TextKitEditor(
                     displayLength = state.editorDisplayLength,
                     textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
                     textColor = TextKitTheme.colors.onSurface,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                BlockquoteEditorOverlay(
+                    layoutResult = state.textLayoutResult,
+                    segments = state.editorSegments(),
+                    displayLength = state.editorDisplayLength,
+                    barColor = TextKitTheme.colors.onSurfaceVariant,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -227,6 +235,13 @@ fun TextKitEditorOutlined(
                     displayLength = state.editorDisplayLength,
                     textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
                     textColor = TextKitTheme.colors.onSurface,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                BlockquoteEditorOverlay(
+                    layoutResult = state.textLayoutResult,
+                    segments = state.editorSegments(),
+                    displayLength = state.editorDisplayLength,
+                    barColor = TextKitTheme.colors.onSurfaceVariant,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

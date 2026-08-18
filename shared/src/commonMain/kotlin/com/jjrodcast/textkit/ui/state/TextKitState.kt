@@ -603,6 +603,23 @@ class TextKitState(
      * alignment change (not a mark), so it applies to whole paragraphs even with a collapsed caret.
      * Returns whether the document changed.
      */
+    /**
+     * Toggles the blockquote on the paragraph(s) the current selection touches (#126): all quoted
+     * removes the quote, anything else applies it. Paragraph-level like alignment, so a collapsed
+     * caret works. Returns whether the document changed.
+     */
+    fun applyBlockquote(): Boolean = recordBefore(coalesceKey = null) {
+        val changed = manager.toggleBlockquote(paragraphOperationRange())
+        if (changed) {
+            updateAnnotatedString(selection)
+            readSelectionContext()
+        }
+        changed
+    }
+
+    /** Whether every plain paragraph in the current selection is quoted — the toolbar toggle state. */
+    val isBlockquoteActive: Boolean get() = manager.isBlockquote(selection)
+
     fun applyTextAlignment(textAlign: TextKitTextAlign): Boolean =
         updateDocument(
             paragraphOperationRange(),

@@ -113,6 +113,20 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
     fun getLink(start: Int, end: Int) = transaction.getLink(start, end, configuration)
 
     /**
+     * Toggles the blockquote on the paragraphs [selection] touches (#126): when every plain
+     * paragraph in the selection is already quoted the quote is removed, otherwise it is applied.
+     * List items and embed placeholders are never quoted in this phase. Works with a collapsed
+     * caret (paragraph-level, like alignment). Returns whether the document changed.
+     */
+    fun toggleBlockquote(selection: TextRange): Boolean {
+        val quoted = transaction.isBlockquote(selection)
+        return transaction.updateBlockquote(selection, !quoted)
+    }
+
+    /** Whether every plain paragraph in [selection] is quoted — drives the toolbar toggle state. */
+    fun isBlockquote(selection: TextRange): Boolean = transaction.isBlockquote(selection)
+
+    /**
      * Single entry point for every document format change: marks, list items, links and colors.
      *
      * - **Marks / list items:** pass the previous and current [TextEditorSelectedMark] and leave

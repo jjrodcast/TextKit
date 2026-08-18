@@ -1,6 +1,11 @@
 package com.jjrodcast.textkit.ui.listlayout
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,6 +52,8 @@ internal sealed interface ViewerBlock {
     data class Paragraph(
         val text: AnnotatedString,
         val inlineContent: Map<String, InlineTextContent>,
+        /** Whether the paragraph carries the blockquote attribute (#126) — renders the quote bar. */
+        val quoted: Boolean = false,
     ) : ViewerBlock
 }
 
@@ -69,7 +76,7 @@ internal fun buildViewerBlocks(
         )
     } else {
         val (text, inlineContent) = buildParagraph(paragraph, true)
-        ViewerBlock.Paragraph(text = text, inlineContent = inlineContent)
+        ViewerBlock.Paragraph(text = text, inlineContent = inlineContent, quoted = paragraph.isQuoted())
     }
 }
 
@@ -101,7 +108,26 @@ internal fun TextKitViewerBlocks(
                     markerColumnWidth = markerColumnWidth,
                 )
 
-                is ViewerBlock.Paragraph -> BasicText(
+                is ViewerBlock.Paragraph -> if (block.quoted) {
+                    // Quoted paragraph: accent bar + indent, the blockquote's visual treatment.
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .background(
+                                    color = TextKitTheme.colors.onSurfaceVariant,
+                                    shape = RoundedCornerShape(2.dp)
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        BasicText(
+                            text = block.text,
+                            inlineContent = block.inlineContent,
+                            style = lineStyle,
+                        )
+                    }
+                } else BasicText(
                     text = block.text,
                     inlineContent = block.inlineContent,
                     style = lineStyle,

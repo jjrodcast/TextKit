@@ -37,7 +37,13 @@ internal data class EditorParagraphSegment(
     val displayEnd: Int,
     val gutterLength: Int,
     val gutter: TextDecoratorModel? = null,
+    /** Whether this paragraph carries the blockquote attribute (#126) — drives the quote bar. */
+    val quoted: Boolean = false,
 )
+
+/** Whether this paragraph carries the blockquote attribute (#126). */
+internal fun TextEditorParagraph.isQuoted(): Boolean =
+    children.any { it.decorator is TextDecoratorModel.BlockquoteDecorator }
 
 /** True when this paragraph should render gutter and content in separate UI regions. */
 internal fun TextEditorParagraph.usesSplitListLayout(): Boolean {
@@ -76,6 +82,7 @@ internal fun buildEditorSegments(
             displayEnd = displayCursor + displayLength,
             gutterLength = gutterLength,
             gutter = if (gutterLength > 0) paragraph.listDecoratorChild()?.decorator else null,
+            quoted = paragraph.isQuoted(),
         )
         displayCursor += displayLength
     }
