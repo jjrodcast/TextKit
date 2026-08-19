@@ -47,7 +47,6 @@ class BlockquoteToggleTest {
         val e = editor()
         assertTrue(e.toggleBlockquote(TextRange(1)))
         val saved = e.toJson()
-        val quote = saved.substringAfter("\"type\":\"blockquote\"")
         assertTrue(e.isBlockquote(TextRange(1)))
         // Mid-paragraph probe: a collapsed offset AT a paragraph start resolves to the paragraph
         // ending there, the same boundary convention marks and alignment follow.
