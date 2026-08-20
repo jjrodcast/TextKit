@@ -414,28 +414,32 @@ class ListItemUiTest {
     }
 
     @Test
-    fun complexJsonV1_enterEmptyItemThenTypeNumberedMarkerRenumbersFollowingItems() {
+    fun complexJsonV1_enterEmptyItemExitsAndRenumbersFollowingItems() {
         val state = stateWith(DocumentUtils.complexJsonV1)
         val text = state.textFieldValue.text
         val endOfFirst = text.lastIndexOf("item", text.indexOf("Second")) + "item".length
         state.simulateTypingAt(endOfFirst, "\n")
-        val afterFirstEnter = state.textFieldValue
-        val mapping = state.visualTransformation.filter(AnnotatedString(afterFirstEnter.text)).offsetMapping
-        val caretAfterExit = mapping.transformedToOriginal(afterFirstEnter.selection.max)
-        state.simulateTypingAt(caretAfterExit, "\n")
-        val afterSecondEnter = state.textFieldValue
-        val mapping2 = state.visualTransformation.filter(AnnotatedString(afterSecondEnter.text)).offsetMapping
-        val caretForMarker = mapping2.transformedToOriginal(afterSecondEnter.selection.max)
-        state.simulateTypingAt(caretForMarker, "3. ")
-        state.simulateTypingAt(state.textFieldValue.selection.max, "gap")
-        val updated = state.textFieldValue.text
-        val secondIndex = updated.indexOf("Second")
-        val prefixBeforeSecond = updated.substring((secondIndex - 4).coerceAtLeast(0), secondIndex)
-        assertTrue(
-            prefixBeforeSecond.contains("3."),
-            "Second item must be renumbered after re-entering the list, got: $updated"
-        )
-        assertTrue(updated.contains("gap"))
+        // Every caret is derived from the document, not from the engine-returned selection (and
+        // not by feeding the FIELD-space selection through transformedToOriginal, as this test
+        // originally did — that double-mapping overshot by an amount that happened to land
+        // harmlessly for every platform's marker lengths until the kept gutter space (#135)
+        // shifted the arithmetic and the iOS single-tab markers exposed it).
+        // The new empty item renumbers the following items down the list.
+        val afterEnter = state.textFieldValue.text
+        assertTrue(afterEnter.contains("3. Second"), "Second item must renumber below the new item, got: $afterEnter")
+
+        // Enter on the empty item's content start: the item exits the list, and the items after
+        // the split renumber from 1 again.
+        val emptyItem = state.editorSegments().filter { it.gutter != null }[1]
+        state.simulateTypingAt(emptyItem.fieldStart + emptyItem.gutterLength, "\n")
+        val afterExit = state.textFieldValue.text
+        assertTrue(afterExit.contains("1. Second"), "Second item must restart numbering after the split, got: $afterExit")
+        assertTrue(!afterExit.contains("2. \n"), "the empty item's marker must be gone, got: $afterExit")
+
+        // The offset mapping still targets the first item's content correctly.
+        val firstItem = state.editorSegments().first { it.gutter != null }
+        state.simulateTypingAt(firstItem.fieldStart + firstItem.gutterLength, "gap")
+        assertTrue(state.textFieldValue.text.contains("gapFirst item"))
     }
 
     @Test
