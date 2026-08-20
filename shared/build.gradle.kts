@@ -86,6 +86,9 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.ktor.client.okhttp)
         }
+        jvmTest.dependencies {
+            implementation(compose.desktop.currentOs)
+        }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
