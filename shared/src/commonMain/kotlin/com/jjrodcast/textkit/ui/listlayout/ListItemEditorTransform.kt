@@ -195,7 +195,10 @@ internal fun ListItemEditorGutterOverlay(
     if (markers.isEmpty()) return
 
     Box(modifier = modifier) {
-        val markerStyle = textStyle.copy(color = textColor)
+        // The same line metrics the field's paragraphs use: the marker is positioned at the line
+        // box TOP, and the field centers its glyphs inside the 1.5em line box — without matching
+        // metrics the marker rendered at the box top, visibly above its own item's baseline (#137).
+        val markerStyle = textStyle.copy(color = textColor).withListLineMetrics()
         markers.forEach { marker ->
             Text(
                 text = marker.label,
