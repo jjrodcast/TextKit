@@ -21,7 +21,6 @@ import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorLis
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
 import com.plangrid.pgfoundation.texteditor.core.validator.ListItemValidator
 import com.plangrid.pgfoundation.texteditor.core.validator.TextInputResult
-import com.jjrodcast.textkit.editor.utils.TABS
 import com.jjrodcast.textkit.editor.utils.isLineBreak
 import com.jjrodcast.textkit.editor.utils.replaceLineBreakWith
 
@@ -311,16 +310,42 @@ internal object TextInsertedTransaction {
             is TextDecoratorModel.NumberDecoratorModel -> PositionalListItemUtils.reorderItems(positionalListItems)
             is TextDecoratorModel.BulletDecoratorModel -> PositionalListItemUtils.reorderItems(positionalListItems, coerceLevel = false)
 
-            else -> positionalListItems
+            // createTransactions scans the list it is handed, not the trees inside it: a nested
+            // item's demotion is invisible unless the tree is flattened first. The two branches
+            // above only survive because reorderItems flattens as a side effect — a nested TASK
+            // item demoted here was silently dropped, turning Enter into a no-op (issue #133).
+            else -> positionalListItems.flatten()
         }
         transactions.addAll(flattenItems.createTransactions())
 
-        val length = currentDecorator.createDecoratorString().length
-        val nextLevelTabsLength = if (currentParagraph.startPiece.decorator.toLevel() > 1) TABS.length else length
-        val rangeOffset = (actionModel.offset - nextLevelTabsLength)
-            .coerceAtLeast(currentParagraph.startOffset)
+        return Pair(TextRange(caretAfterEmptyItemBreak(currentParagraph, transactions, actionModel)), transactions)
+    }
 
-        return Pair(TextRange(rangeOffset), transactions)
+    /**
+     * The caret after Enter on an empty list item, derived from the transactions that were
+     * actually emitted rather than from the demotion the caller assumed (issue #133; the previous
+     * arithmetic subtracted a fixed tab-pair width for any nested item — when the transactions did nothing
+     * the caret stepped back INTO the marker, when they deleted the marker whole it landed one
+     * character short of the emptied line, and when they removed more than assumed it went past
+     * the document end — #131's clamp, seed 46382). The caret belongs at the item's content
+     * start: its old position at [TextEditorAction.TextAdded.offset], shifted by exactly what the
+     * transactions change at or before the item's paragraph.
+     */
+    private fun caretAfterEmptyItemBreak(
+        currentParagraph: PieceParagraph,
+        transactions: List<TextEditorListItemTransaction>,
+        actionModel: TextEditorAction.TextAdded
+    ): Int {
+        val delta = transactions
+            .filter { it.offsetInDocument <= currentParagraph.startOffset }
+            .sumOf { transaction ->
+                when (val type = transaction.type) {
+                    is TextEditorDecoratorTransactionType.Update -> type.model.text.length - type.length
+                    is TextEditorDecoratorTransactionType.Delete -> -type.length
+                    is TextEditorDecoratorTransactionType.Insert -> type.model.text.length
+                }
+            }
+        return (actionModel.offset + delta).coerceAtLeast(currentParagraph.startOffset)
     }
 
     /**
