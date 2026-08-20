@@ -141,8 +141,8 @@ internal object EditingStress {
     /** Decides the next operation from [rng] and returns its description plus a thunk that runs it. */
     internal fun decideOp(editor: TextKitEditorManager, rng: Random): Pair<String, () -> Unit> {
         val len = editor.text.length
-        // 20 values for 19 explicit branches plus the colour op in `else`.
-        return when (rng.nextInt(20)) {
+        // 21 values for 20 explicit branches plus the colour op in `else`.
+        return when (rng.nextInt(21)) {
             0 -> {
                 val at = rng.nextInt(len + 1)
                 val text = randomText(rng)
@@ -269,6 +269,12 @@ internal object EditingStress {
                 val at = if (len == 0) 0 else rng.nextInt(len)
                 val embed = editor.embedAt(at) ?: return "updateEmbed <none>" to {}
                 "updateEmbed @$at" to { editor.updateEmbedAt(embed.range, TABLE_BLOCK_ALT); Unit }
+            }
+
+            19 -> {
+                // The quote toggle (#126): paragraph-level, collapsed carets included.
+                val range = randomRange(rng, len)
+                "toggleQuote $range" to { editor.toggleBlockquote(range); Unit }
             }
 
             18 -> {

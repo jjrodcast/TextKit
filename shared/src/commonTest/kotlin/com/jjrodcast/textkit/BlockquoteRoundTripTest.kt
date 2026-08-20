@@ -48,6 +48,20 @@ class BlockquoteRoundTripTest {
     }
 
     @Test
+    fun enter_inside_a_quote_continues_it_and_typed_text_stays_quoted() {
+        val editor = editorFrom(QUOTE_DOC)
+        // Enter at the end of the first quoted paragraph, then type on the new line.
+        val at = editor.text.indexOf("quoted") + "quoted".length
+        editor.typeText(at, "\n")
+        editor.typeText(at + 1, "more")
+        val saved = editor.toJson()
+        val quote = TEXT_EDITOR_JSON.parseToJsonElement(saved).jsonObject["content"]!!.jsonArray
+            .first { it.jsonObject["type"]?.jsonPrimitive?.content == "blockquote" }
+        assertTrue(quote.toString().contains("more"), "the continuation left the quote: $saved")
+        assertEquals(saved, editorFrom(saved).toJson())
+    }
+
+    @Test
     fun an_empty_quoted_paragraph_keeps_its_membership() {
         val editor = editorFrom(
             """{"type":"doc","content":[

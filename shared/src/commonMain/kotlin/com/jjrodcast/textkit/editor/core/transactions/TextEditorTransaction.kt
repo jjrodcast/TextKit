@@ -24,6 +24,7 @@ import com.jjrodcast.textkit.editor.core.piecetable.PieceTableSnapshot
 import com.jjrodcast.textkit.editor.core.piecetable.RichTextEditorBasePieceTable
 import com.jjrodcast.textkit.editor.core.piecetable.RichTextEditorPieceTable
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPieceTransaction
+import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.models.MarkSearchType
 import com.jjrodcast.textkit.editor.core.transactions.lists.ListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.marks.FormatTransaction
@@ -282,6 +283,26 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
             )
         }
     }
+
+    /**
+     * The blockquote attribute of the paragraph an insertion at [offset] lands in, or null when it
+     * is not quoted (#126). Resolved FORWARD (the paragraph starting at a boundary, not the one
+     * ending there) so typing at the start of the paragraph after a quote does not inherit the
+     * quote; at the document end it falls back to the last paragraph.
+     */
+    internal fun quoteDecoratorAt(offset: Int): TextDecoratorModel.BlockquoteDecorator? {
+        val end = (offset + 1).coerceAtMost(text.length)
+        val paragraph = pieceTable.getLineContent(offset, end).paragraphsInSelectedRange.firstOrNull()
+            ?: return null
+        return paragraph.pieces.firstNotNullOfOrNull { it.piece.decorator as? TextDecoratorModel.BlockquoteDecorator }
+    }
+
+    /** Applies or removes the blockquote attribute over [range]'s plain paragraphs (#126). */
+    internal fun updateBlockquote(range: TextRange, quoted: Boolean): Boolean =
+        pieceTable.updateBlockquote(range.min, range.max, quoted)
+
+    /** Whether every plain paragraph in [range] carries the blockquote attribute. */
+    internal fun isBlockquote(range: TextRange): Boolean = pieceTable.isBlockquote(range.min, range.max)
 
     override fun getTextAt(offset: Int) = pieceTable.getTextAt(offset)
 

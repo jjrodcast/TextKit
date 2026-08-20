@@ -77,7 +77,17 @@ object TextTransaction {
 
         manager.transaction.commitChanges(transactions)
 
-        return Pair(true, selection)
+        // The caret an action reports must lie inside the post-commit document. Some legacy list
+        // paths compute it from pre-commit arithmetic that can go stale when the transactions
+        // remove more than assumed (an empty nested item's marker deleted whole rather than
+        // demoted): callers that chain actions — a multiline paste inserts segment by segment —
+        // would then write past the document end and corrupt the piece table.
+        val length = manager.text.length
+        val bounded = TextRange(
+            selection.start.coerceIn(0, length),
+            selection.end.coerceIn(0, length),
+        )
+        return Pair(true, bounded)
     }
 
     /**

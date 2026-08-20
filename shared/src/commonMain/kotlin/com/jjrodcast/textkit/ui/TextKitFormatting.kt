@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.FormatBold
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.FormatItalic
 import androidx.compose.material.icons.rounded.FormatListNumbered
+import androidx.compose.material.icons.rounded.FormatQuote
 import androidx.compose.material.icons.rounded.FormatStrikethrough
 import androidx.compose.material.icons.rounded.FormatUnderlined
 import androidx.compose.material.icons.rounded.Link
@@ -70,6 +71,7 @@ import com.jjrodcast.textkit.ui.utils.TextKitPickerPallete
 import org.jetbrains.compose.resources.stringResource
 import textkit.shared.generated.resources.Res
 import textkit.shared.generated.resources.align_text
+import textkit.shared.generated.resources.blockquote_text
 import textkit.shared.generated.resources.bold_text
 import textkit.shared.generated.resources.bulleted_list_text
 import textkit.shared.generated.resources.document_text
@@ -122,6 +124,8 @@ fun TextKitFormattingBar(
     onDocumentClick: (Boolean) -> Unit = {},
     onOrderedListClick: (Boolean) -> Unit = {},
     onBulletedListClick: (Boolean) -> Unit = {},
+    onBlockquoteClick: (Boolean) -> Unit = {},
+    isBlockquoteActive: Boolean = false,
     onTextAlignClick: (Rect) -> Unit = {},
     onTextAndColorClick: (Rect) -> Unit = {},
     onUndoClick: () -> Unit = {},
@@ -144,6 +148,8 @@ fun TextKitFormattingBar(
         onDocumentClick = onDocumentClick,
         onOrderedListClick = onOrderedListClick,
         onBulletedListClick = onBulletedListClick,
+        onBlockquoteClick = onBlockquoteClick,
+        isBlockquoteActive = isBlockquoteActive,
         onTextAlignClick = onTextAlignClick,
         onUndoClick = onUndoClick,
         onRedoClick = onRedoClick,
@@ -169,6 +175,8 @@ fun TextKitFormattingBarInternal(
     onDocumentClick: (Boolean) -> Unit = {},
     onOrderedListClick: (Boolean) -> Unit = {},
     onBulletedListClick: (Boolean) -> Unit = {},
+    onBlockquoteClick: (Boolean) -> Unit = {},
+    isBlockquoteActive: Boolean = false,
     onTextAlignClick: (Rect) -> Unit = {},
     onUndoClick: () -> Unit = {},
     onRedoClick: () -> Unit = {},
@@ -265,6 +273,14 @@ fun TextKitFormattingBarInternal(
                 painter = rememberVectorPainter(Icons.AutoMirrored.Rounded.FormatListBulleted),
                 onClick = onBulletedListClick,
                 value = barState.isBulletedList,
+                backgroundColor = selectedColor
+            )
+            TextKitFormattingSeparator()
+            TextKitTooltipFormattingItem(
+                tooltipText = stringResource(Res.string.blockquote_text),
+                painter = rememberVectorPainter(Icons.Rounded.FormatQuote),
+                onClick = onBlockquoteClick,
+                value = isBlockquoteActive,
                 backgroundColor = selectedColor
             )
             TextKitFormattingSeparator()

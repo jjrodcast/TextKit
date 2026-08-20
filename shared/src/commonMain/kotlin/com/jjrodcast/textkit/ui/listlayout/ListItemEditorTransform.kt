@@ -1,7 +1,10 @@
 package com.jjrodcast.textkit.ui.listlayout
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -18,7 +21,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.jjrodcast.textkit.editor.core.parser.TextAlign as TextKitTextAlign
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
@@ -66,7 +71,10 @@ internal object ListItemEditorTransform {
         splitLayout: Boolean,
     ): ParagraphStyle {
         val base = defaultStyle.copy(textAlign = toComposeAlign(paragraph.textAlign))
-        if (!splitLayout) return base
+        if (!splitLayout) {
+            // Quoted paragraphs indent so the quote bar overlay has room at the container start.
+            return if (paragraph.isQuoted()) base.copy(textIndent = TextIndent(firstLine = QUOTE_INDENT, restLine = QUOTE_INDENT)) else base
+        }
         val gutter = paragraph.listDecoratorChild()?.decorator ?: return base
         val indent = gutterIndent(gutter)
         return base.copy(textIndent = TextIndent(firstLine = indent, restLine = indent))
@@ -165,6 +173,63 @@ internal fun ListItemEditorGutterOverlay(
             )
         }
     }
+}
+
+/**
+ * Draws the blockquote accent bar for every quoted paragraph (#126), positioned from the laid-out
+ * display lines. Same generation guard as [ListItemEditorGutterOverlay]: while the layout lags the
+ * segments by a frame, keep painting the last pair that agreed (#112).
+ */
+@Composable
+internal fun BlockquoteEditorOverlay(
+    layoutResult: TextLayoutResult?,
+    segments: List<EditorParagraphSegment>,
+    displayLength: Int,
+    barColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    if (layoutResult == null) return
+    val laidOutLength = layoutResult.layoutInput.text.length
+    if (laidOutLength == 0) return
+
+    val lastAgreed = remember { arrayOfNulls<List<QuoteBar>>(1) }
+    val bars = if (laidOutLength == displayLength) {
+        buildQuoteBars(segments, layoutResult, laidOutLength).also { lastAgreed[0] = it }
+    } else {
+        lastAgreed[0] ?: return
+    }
+    if (bars.isEmpty()) return
+
+    Box(modifier = modifier) {
+        val density = LocalDensity.current
+        bars.forEach { bar ->
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(x = 0, y = bar.top.roundToInt()) }
+                    .size(width = 3.dp, height = with(density) { (bar.bottom - bar.top).toDp() })
+                    .background(color = barColor, shape = RoundedCornerShape(2.dp))
+            )
+        }
+    }
+}
+
+/** One quoted paragraph's accent bar, resolved to the vertical span of its laid-out lines. */
+private data class QuoteBar(val top: Float, val bottom: Float)
+
+/** Display indent for quoted paragraphs — the freed space hosts the quote bar. */
+private val QUOTE_INDENT = 1.em
+
+private fun buildQuoteBars(
+    segments: List<EditorParagraphSegment>,
+    layoutResult: TextLayoutResult,
+    displayLength: Int,
+): List<QuoteBar> = segments.mapNotNull { segment ->
+    if (!segment.quoted) return@mapNotNull null
+    val startOffset = segment.displayStart.coerceIn(0, displayLength - 1)
+    val endOffset = (segment.displayEnd - 1).coerceIn(startOffset, displayLength - 1)
+    val top = layoutResult.getLineTop(layoutResult.getLineForOffset(startOffset))
+    val bottom = layoutResult.getLineBottom(layoutResult.getLineForOffset(endOffset))
+    QuoteBar(top = top, bottom = bottom)
 }
 
 /** A list marker resolved to the vertical position of the line it belongs to. */

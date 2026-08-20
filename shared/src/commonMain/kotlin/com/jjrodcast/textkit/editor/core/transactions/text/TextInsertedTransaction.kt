@@ -27,6 +27,18 @@ import com.jjrodcast.textkit.editor.utils.replaceLineBreakWith
 
 internal object TextInsertedTransaction {
 
+    /**
+     * The quote attribute inserted text inherits (#126): the blockquote decorator of the paragraph
+     * the insertion lands in, resolved forward at boundaries (typing at the start of the paragraph
+     * AFTER a quote does not inherit it), falling back to the last paragraph at the document end.
+     */
+    private fun MultiPieceParagraph.quoteDecoratorAt(offset: Int): TextDecoratorModel.BlockquoteDecorator? {
+        val paragraph = paragraphs.firstOrNull { offset < it.endOffset + it.endPiece.length }
+            ?: paragraphs.lastOrNull()
+            ?: return null
+        return paragraph.pieces.firstNotNullOfOrNull { it.piece.decorator as? TextDecoratorModel.BlockquoteDecorator }
+    }
+
     internal fun addText(
         lines: MultiPieceParagraph,
         actionModel: TextEditorAction.TextAdded
@@ -139,12 +151,14 @@ internal object TextInsertedTransaction {
         return when {
             paragraph == null -> insertTextInParagraph(
                 actionModel,
-                getMarksForInsertion(actionModel.marks, filterLinkMarks = true)
+                getMarksForInsertion(actionModel.marks, filterLinkMarks = true),
+                lines.quoteDecoratorAt(actionModel.offset),
             )
 
             paragraph.text.isLineBreak() && actionModel.text.isLineBreak() -> insertTextInParagraph(
                 actionModel,
-                getMarksForInsertion(actionModel.marks, filterLinkMarks = true)
+                getMarksForInsertion(actionModel.marks, filterLinkMarks = true),
+                lines.quoteDecoratorAt(actionModel.offset),
             )
 
             else -> insertTextInNonEmptyParagraph(paragraph, lines, actionModel)
@@ -213,7 +227,7 @@ internal object TextInsertedTransaction {
             )
         } else {
             val finalMarks = getMarksForInsertion(actionModel.marks)
-            insertTextInParagraph(actionModel, finalMarks)
+            insertTextInParagraph(actionModel, finalMarks, lines.quoteDecoratorAt(actionModel.offset))
         }
     }
 
@@ -248,9 +262,10 @@ internal object TextInsertedTransaction {
 
     private fun insertTextInParagraph(
         actionModel: TextEditorAction.TextAdded,
-        marks: Set<Mark>
+        marks: Set<Mark>,
+        quote: TextDecoratorModel.BlockquoteDecorator? = null,
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
-        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = null)
+        val model = TextEditorModel.create(text = actionModel.text, marks = marks, decorator = quote)
         val transaction = TextTransactionsUtils.insertTransaction(actionModel.offset, model)
         val rangeOffset = actionModel.offset + actionModel.text.length
 

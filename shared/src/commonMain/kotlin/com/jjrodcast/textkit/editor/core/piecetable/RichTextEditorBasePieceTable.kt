@@ -424,6 +424,43 @@ internal abstract class RichTextEditorBasePieceTable :
         return changed
     }
 
+    /**
+     * Stamps or removes the blockquote attribute on every PLAIN paragraph the range touches (#126).
+     * Paragraph-level like [updateTextAlign] — runs for a collapsed caret too. List items and embed
+     * placeholders are skipped: a quote holds plain paragraphs in this phase.
+     */
+    internal fun updateBlockquote(start: Int, end: Int, quoted: Boolean): Boolean {
+        var changed = false
+        getLineContent(start, end).paragraphsInSelectedRange.fastForEach { paragraph ->
+            if (paragraph.startPiece.isDecorator || paragraph.startPiece.isToken) return@fastForEach
+            paragraph.pieces.fastForEach { model ->
+                val isQuoted = model.piece.decorator is TextDecoratorModel.BlockquoteDecorator
+                if (isQuoted == quoted) return@fastForEach
+                val index = getIndexOf(model)
+                if (index < 0) return@fastForEach
+                val decorator = if (quoted) TextDecoratorModel.BlockquoteDecorator(1) else null
+                rope.replaceAt(index, model.piece.copy(decorator = decorator))
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    /**
+     * Whether every plain paragraph the range touches is quoted — the toggle's pivot: all quoted
+     * removes the quote, anything else applies it. Ranges holding only list items or embeds (no
+     * plain paragraph at all) report false, so a toggle there is a no-op apply that skips them.
+     */
+    internal fun isBlockquote(start: Int, end: Int): Boolean {
+        var sawPlain = false
+        getLineContent(start, end).paragraphsInSelectedRange.fastForEach { paragraph ->
+            if (paragraph.startPiece.isDecorator || paragraph.startPiece.isToken) return@fastForEach
+            sawPlain = true
+            if (paragraph.pieces.none { it.piece.decorator is TextDecoratorModel.BlockquoteDecorator }) return false
+        }
+        return sawPlain
+    }
+
     internal fun updateDecorator(model: TextEditorModel): Boolean {
         val piece = model.piece
         return when (val decorator = piece.decorator) {
