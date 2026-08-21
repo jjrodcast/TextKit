@@ -45,11 +45,21 @@ class ListGutterIndentRenderTest {
         createTextKitConfiguration()
     ).apply { setup() }
 
+    /**
+     * The gutter is 2.75em wide and a line box 1.5em tall, while a bare space advance is ~0.25em —
+     * so "content starts beyond one line height" separates a working gutter from a regressed one
+     * at any font size or density, without a hard-coded pixel threshold.
+     */
+    private fun assertContentClearsTheGutter(layout: androidx.compose.ui.text.TextLayoutResult, message: String) {
+        val lineHeight = layout.getLineBottom(0) - layout.getLineTop(0)
+        assertTrue(layout.getHorizontalPosition(1, true) > lineHeight, message)
+    }
+
     @Test
     fun a_single_word_list_item_is_indented_past_its_marker() {
         val layout = rendered(stateOf("loneword"))
         // display position 1 is the item's first content character — past the gutter, not at the edge
-        assertTrue(layout.getHorizontalPosition(1, true) > 20f, "the item's text must not sit at the container edge")
+        assertContentClearsTheGutter(layout, "the item's text must not sit at the container edge")
     }
 
     @Test
@@ -84,7 +94,7 @@ class ListGutterIndentRenderTest {
             frame(); frame()
         }
         val layout = state.textLayoutResult ?: error("no layout")
-        assertTrue(layout.getHorizontalPosition(1, true) > 20f, "the converted item's text must not sit under the marker")
+        assertContentClearsTheGutter(layout, "the converted item's text must not sit under the marker")
         assertTrue(layout.lineCount == 1, "the converted item must not wrap")
     }
 }

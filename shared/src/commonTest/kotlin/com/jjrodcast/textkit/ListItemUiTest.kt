@@ -90,8 +90,9 @@ class ListItemUiTest {
         val fieldText = state.textFieldValue.text
         val transformed = state.visualTransformation.filter(AnnotatedString(fieldText))
         val contentStart = fieldText.indexOf('c')
-        // Display position 0 is the marker's kept trailing space (visually zero-width, #135); the
-        // content begins one past it. Both display 0 and 1 resolve back to the field content start.
+        // Display position 0 is the marker's kept trailing space, whose advance reserves the
+        // gutter column (#135); the content begins one past it. Both display 0 and 1 resolve back
+        // to the field content start.
         assertEquals(1, transformed.offsetMapping.originalToTransformed(contentStart))
         assertEquals(contentStart, transformed.offsetMapping.transformedToOriginal(0))
         assertEquals(contentStart, transformed.offsetMapping.transformedToOriginal(1))
