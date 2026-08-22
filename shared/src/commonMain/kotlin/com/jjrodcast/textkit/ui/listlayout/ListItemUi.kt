@@ -36,6 +36,8 @@ internal data class EditorParagraphSegment(
     val displayStart: Int,
     val displayEnd: Int,
     val gutterLength: Int,
+    /** 1 when the marker's trailing space stays in the display text (#135), else 0. */
+    val keptSpace: Int = 0,
     val gutter: TextDecoratorModel? = null,
     /** Whether this paragraph carries the blockquote attribute (#126) — drives the quote bar. */
     val quoted: Boolean = false,
@@ -57,6 +59,15 @@ internal fun TextEditorParagraph.listDecoratorChild(): TextEditorItem? =
 internal fun TextEditorParagraph.decoratorFieldLength(): Int =
     if (usesSplitListLayout()) listDecoratorChild()?.text?.length ?: 0 else 0
 
+/**
+ * 1 when the marker's trailing space stays in the display text (see the rationale on
+ * buildDisplayAnnotatedString), else 0. Field-side arithmetic keeps using [decoratorFieldLength]
+ * — the content still starts after the FULL marker in field coordinates; only the display and
+ * the offset mapping account for the kept character.
+ */
+internal fun TextEditorParagraph.keptGutterSpace(): Int =
+    if (usesSplitListLayout() && listDecoratorChild()?.text?.endsWith(' ') == true) 1 else 0
+
 internal fun buildEditorSegments(
     paragraphs: List<TextEditorParagraph>,
     fieldLength: Int,
@@ -73,7 +84,8 @@ internal fun buildEditorSegments(
         val fieldParagraphLength =
             paragraph.children.sumOf { displayTextOf(it, fieldLength).length }
         val gutterLength = paragraph.decoratorFieldLength()
-        val displayLength = fieldParagraphLength - gutterLength
+        val keptSpace = paragraph.keptGutterSpace()
+        val displayLength = fieldParagraphLength - gutterLength + keptSpace
 
         segments += EditorParagraphSegment(
             fieldStart = fieldStart,
@@ -81,6 +93,7 @@ internal fun buildEditorSegments(
             displayStart = displayCursor,
             displayEnd = displayCursor + displayLength,
             gutterLength = gutterLength,
+            keptSpace = keptSpace,
             gutter = if (gutterLength > 0) paragraph.listDecoratorChild()?.decorator else null,
             quoted = paragraph.isQuoted(),
         )

@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import com.jjrodcast.textkit.editor.core.parser.TextAlign as TextKitTextAlign
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
@@ -46,7 +47,23 @@ internal object ListItemEditorTransform {
             val splitLayout = paragraph.usesSplitListLayout()
             withStyle(paragraphStyle(paragraph, defaultStyle, toComposeAlign, splitLayout)) {
                 paragraph.children.forEach { child ->
-                    if (splitLayout && child.decorator != null) return@forEach
+                    if (splitLayout && child.decorator != null) {
+                        // The marker's trailing space stays in the display and its advance IS the
+                        // first-line gutter (#135). Two Skia behaviors force this shape: a
+                        // paragraph whose display text carries no whitespace at all never gets its
+                        // TextIndent applied (a lone word rendered at the container edge, under
+                        // the marker), and a first-line TextIndent is invisible to the text's
+                        // intrinsic width (a content-sized field soft-wrapped its own text
+                        // mid-word). A real character's advance participates in both, so the
+                        // reserved width and the rendered width agree by construction.
+                        if (child.text.endsWith(' ')) {
+                            val gutterEm = child.text.length * GUTTER_EM_FACTOR
+                            withStyle(
+                                SpanStyle(letterSpacing = (gutterEm - SPACE_ADVANCE_EM).em)
+                            ) { append(' ') }
+                        }
+                        return@forEach
+                    }
                     withStyle(spanStyleOf(child)) {
                         append(displayTextOf(child, fieldLength))
                     }
@@ -76,14 +93,26 @@ internal object ListItemEditorTransform {
             return if (paragraph.isQuoted()) base.copy(textIndent = TextIndent(firstLine = QUOTE_INDENT, restLine = QUOTE_INDENT)) else base
         }
         val gutter = paragraph.listDecoratorChild()?.decorator ?: return base
+        // The FIRST line's gutter is reserved by the kept marker space's advance (see
+        // buildDisplayAnnotatedString), not by TextIndent: a first-line indent is invisible to the
+        // text's intrinsic width, so a field sized to its content laid the text out narrower than
+        // it renders and soft-wrapped it mid-word (#135). TextIndent stays on the wrapped lines
+        // only, where no intrinsic accounting exists to disagree with.
         val indent = gutterIndent(gutter)
-        return base.copy(textIndent = TextIndent(firstLine = indent, restLine = indent))
+        return base.copy(textIndent = TextIndent(firstLine = 0.sp, restLine = indent))
     }
 
     private fun gutterIndent(decorator: TextDecoratorModel): TextUnit =
         (decorator.createDecoratorString().length * GUTTER_EM_FACTOR).em
 
     private const val GUTTER_EM_FACTOR = 0.55f
+
+    /**
+     * A typical space glyph advance, subtracted so the kept space plus its letter spacing add up
+     * to the same gutter width the wrapped-line TextIndent uses (both are em estimates — the
+     * marker column has always been sized that way, see [gutterIndent]).
+     */
+    private const val SPACE_ADVANCE_EM = 0.25f
 }
 
 private class ListItemOffsetMapping(
@@ -97,9 +126,11 @@ private class ListItemOffsetMapping(
             if (offset <= segment.fieldStart) break
             if (segment.gutterLength == 0) continue
             when {
-                offset >= segment.fieldEnd -> skippedGutters += segment.gutterLength
+                // net per-segment field→display delta: the stripped marker minus its kept space
+                offset >= segment.fieldEnd -> skippedGutters += segment.gutterLength - segment.keptSpace
                 offset < segment.fieldStart + segment.gutterLength -> return segment.displayStart
-                else -> return segment.displayStart + (offset - segment.fieldStart - segment.gutterLength)
+                else -> return segment.displayStart + segment.keptSpace +
+                    (offset - segment.fieldStart - segment.gutterLength)
             }
         }
         return (offset - skippedGutters).coerceIn(0, totalDisplayLength)
@@ -119,7 +150,9 @@ private class ListItemOffsetMapping(
             return if (segment.gutterLength == 0) {
                 segment.fieldStart + local
             } else {
-                segment.fieldStart + segment.gutterLength + local
+                // the kept space belongs to the gutter: a caret on it (or before it) resolves to
+                // the item's content start, never inside the marker
+                segment.fieldStart + segment.gutterLength + (local - segment.keptSpace).coerceAtLeast(0)
             }
         }
         return segments.lastOrNull()?.fieldEnd ?: offset
