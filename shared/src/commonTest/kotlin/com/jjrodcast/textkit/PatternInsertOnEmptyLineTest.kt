@@ -1,5 +1,7 @@
 package com.jjrodcast.textkit
 
+import com.jjrodcast.textkit.editor.utils.TABS
+import com.jjrodcast.textkit.editor.utils.TASK_DECORATOR_UNCHECKED_INTERACTIVE
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -25,7 +27,8 @@ class PatternInsertOnEmptyLineTest {
       ]}
     ]}"""
 
-    private val healed = "\t\t1. First\n\t\t2. \n\t\t3. Second"
+    // Marker strings are platform-relative: the tab unit and the task glyph differ per target.
+    private val healed = "${TABS}1. First\n${TABS}2. \n${TABS}3. Second"
 
     @Test
     fun a_single_insert_of_the_whole_pattern_converts_without_shearing() {
@@ -52,7 +55,7 @@ class PatternInsertOnEmptyLineTest {
         val emptyLine = e.text.indexOf('\n') + 1
         e.typeText(emptyLine, "-[] ")
         val saved = e.toJson()
-        assertEquals("\t\t1. First\n\t\t-[] \n\t\t1. Second", e.text)
+        assertEquals("${TABS}1. First\n$TABS$TASK_DECORATOR_UNCHECKED_INTERACTIVE\n${TABS}1. Second", e.text)
         assertEquals(saved, editorFrom(saved).toJson())
     }
 
@@ -64,7 +67,7 @@ class PatternInsertOnEmptyLineTest {
         var c = e.typeText(e.text.length, "3").end
         c = e.typeText(c, ".").end
         e.typeText(c, " ")
-        assertEquals("plain\n\t\t3. ", e.text)
+        assertEquals("plain\n${TABS}3. ", e.text)
         assertEquals(e.toJson(), editorFrom(e.toJson()).toJson())
     }
 }
