@@ -71,7 +71,7 @@ object TextTransaction {
         val (selection, transactions) = when (actionModel) {
             is TextEditorAction.TextAdded -> {
                 val lines = manager.transaction.getLineContentWithNeighborParagraphs(actionModel.offset, actionModel.offset)
-                TextInsertedTransaction.addText(lines, actionModel)
+                TextInsertedTransaction.addText(lines, actionModel, manager)
             }
 
             is TextEditorAction.TextRemoved -> {

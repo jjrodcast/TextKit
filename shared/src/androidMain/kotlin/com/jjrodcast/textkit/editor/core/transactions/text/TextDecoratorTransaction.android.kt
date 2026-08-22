@@ -27,7 +27,7 @@ actual object TextDecoratorTransaction {
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextAdded
     ): TextEditorListItemTransaction {
-        val deleteLength = inputResult.model.text.length - (inputResult.model.piece.decorator?.key?.length ?: 0)
+        val deleteLength = TextTransactionsUtils.patternTextInDocumentLength(paragraph)
 
         return TextTransactionsUtils.updateTransaction(
             paragraph.startOffset,

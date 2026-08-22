@@ -2,6 +2,7 @@ package com.jjrodcast.textkit.editor.core.transactions.text
 
 import androidx.compose.ui.text.TextRange
 import com.jjrodcast.textkit.editor.components.TextEditorListItem
+import com.jjrodcast.textkit.editor.core.TextKitEditorManager
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
 import com.jjrodcast.textkit.editor.core.converters.utils.PositionalListItemUtils
@@ -40,7 +41,8 @@ internal object TextInsertedTransaction {
 
     internal fun addText(
         lines: MultiPieceParagraph,
-        actionModel: TextEditorAction.TextAdded
+        actionModel: TextEditorAction.TextAdded,
+        manager: TextKitEditorManager
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         // The decorator is presentation-only and atomic, so an insert whose offset falls in a
         // decorator region must not splice into it (issue #69; the replace path got the same rule
@@ -64,7 +66,8 @@ internal object TextInsertedTransaction {
                 // piecesInSelectedRange routing sees the content position, not the decorator.
                 return addText(
                     lines.atOffset(contentStart),
-                    actionModel.copy(offset = contentStart, selection = TextRange(contentStart + actionModel.text.length))
+                    actionModel.copy(offset = contentStart, selection = TextRange(contentStart + actionModel.text.length)),
+                    manager
                 )
             }
         }
@@ -82,7 +85,7 @@ internal object TextInsertedTransaction {
         return if (updatedSelectedParagraph != null && isAddingTextToListItem) {
             insertTextInListParagraph(updatedSelectedParagraph, lines, actionModel)
         } else {
-            insertTextInParagraph(updatedSelectedParagraph, lines, actionModel)
+            insertTextInParagraph(updatedSelectedParagraph, lines, actionModel, manager)
         }
     }
 
@@ -145,7 +148,8 @@ internal object TextInsertedTransaction {
     private fun insertTextInParagraph(
         paragraph: PieceParagraph?,
         lines: MultiPieceParagraph,
-        actionModel: TextEditorAction.TextAdded
+        actionModel: TextEditorAction.TextAdded,
+        manager: TextKitEditorManager
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         return when {
             paragraph == null -> insertTextInParagraph(
@@ -160,28 +164,39 @@ internal object TextInsertedTransaction {
                 lines.quoteDecoratorAt(actionModel.offset),
             )
 
-            else -> insertTextInNonEmptyParagraph(paragraph, lines, actionModel)
+            else -> insertTextInNonEmptyParagraph(paragraph, lines, actionModel, manager)
         }
     }
 
     private fun insertTextInNonEmptyParagraph(
         paragraph: PieceParagraph,
         lines: MultiPieceParagraph,
-        actionModel: TextEditorAction.TextAdded
+        actionModel: TextEditorAction.TextAdded,
+        manager: TextKitEditorManager
     ): Pair<TextRange, List<TextEditorListItemTransaction>> {
         // We need to validate if the text added matches with the regex
         val input = matchesListItemPattern(paragraph, actionModel)
         // It matches the regex, so we need to insert the decorator, otherwise just add the text
         return if (input != null) {
+            // The caller's window is built around the collapsed caret, and a caret on an EMPTY
+            // line resolves backward — the paragraph being converted lands in the window's
+            // single-next-paragraph fallback slot and the list items after it are cut off, so the
+            // renumber pass never saw them (issue #138). Fetch the neighborhood from the converted
+            // paragraph's own span instead: it selects the paragraph itself, so the window carries
+            // the full list context on both sides.
+            val reorderLines = manager.transaction.getLineContentWithNeighborParagraphs(
+                paragraph.startOffset,
+                paragraph.endOffset + paragraph.endPiece.length,
+            )
             val insertedDecorator = input.model.piece?.decorator
             val leveledNumberedDecorator = if (insertedDecorator is TextDecoratorModel.NumberDecoratorModel) {
-                val listLevel = numberedListLevelAdjacentTo(lines, paragraph)
+                val listLevel = numberedListLevelAdjacentTo(reorderLines, paragraph)
                 insertedDecorator.copyValue(level = listLevel)
             } else {
                 null
             }
             val reorderedItems = if (leveledNumberedDecorator != null) {
-                TextTransactionsUtils.numberedListReorderAfterPatternInsert(lines, paragraph, leveledNumberedDecorator)
+                TextTransactionsUtils.numberedListReorderAfterPatternInsert(reorderLines, paragraph, leveledNumberedDecorator)
             } else {
                 emptyList()
             }
