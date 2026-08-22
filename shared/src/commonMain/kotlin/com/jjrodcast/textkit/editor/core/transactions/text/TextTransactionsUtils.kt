@@ -51,11 +51,6 @@ internal object TextTransactionsUtils {
     }
 
     /**
-     * After the user types a numbered-list marker on a plain paragraph that sits in a numbered
-     * sequence (e.g. exiting an empty item with Enter, then typing `3. `), renumber the connected
-     * block so following siblings stay in order.
-     */
-    /**
      * The characters a just-matched list pattern already occupies in [paragraph] — what the marker
      * update must consume from the document. The validated line is the paragraph's literal text
      * plus the inserted text, so the document's share is exactly the paragraph's text (the marker
@@ -75,6 +70,11 @@ internal object TextTransactionsUtils {
         return paragraphText.replaceLineBreakWith("").length
     }
 
+    /**
+     * After the user types a numbered-list marker on a plain paragraph that sits in a numbered
+     * sequence (e.g. exiting an empty item with Enter, then typing `3. `), renumber the connected
+     * block so following siblings stay in order.
+     */
     internal fun numberedListReorderAfterPatternInsert(
         lines: MultiPieceParagraph,
         paragraph: PieceParagraph,

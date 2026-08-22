@@ -6,8 +6,6 @@ import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorListItemTransaction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
-import com.jjrodcast.textkit.editor.utils.TASK_DECORATOR_COMMON
-import com.jjrodcast.textkit.editor.utils.TASK_DECORATOR_UNCHECKED_COMMON
 import com.plangrid.pgfoundation.texteditor.core.validator.TextInputResult
 
 actual object TextDecoratorTransaction {
