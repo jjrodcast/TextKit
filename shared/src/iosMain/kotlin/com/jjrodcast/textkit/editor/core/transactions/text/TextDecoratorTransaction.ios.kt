@@ -24,7 +24,7 @@ actual object TextDecoratorTransaction {
         paragraph: PieceParagraph,
         actionModel: TextEditorAction.TextAdded
     ): TextEditorListItemTransaction {
-        val deleteLength = getDeleteLength(inputResult, actionModel.text.length)
+        val deleteLength = TextTransactionsUtils.patternTextInDocumentLength(paragraph)
 
         return TextTransactionsUtils.updateTransaction(
             paragraph.startOffset,
@@ -33,17 +33,4 @@ actual object TextDecoratorTransaction {
         )
     }
 
-    private fun getDeleteLength(inputResult: TextInputResult, textLength: Int): Int {
-        return when (val decorator = inputResult.model.piece.decorator) {
-            is TextDecoratorModel.TaskDecoratorModel -> {
-                if (decorator.checked) {
-                    TASK_DECORATOR_COMMON.length - textLength
-                } else {
-                    TASK_DECORATOR_UNCHECKED_COMMON.length - textLength
-                }
-            }
-
-            else -> inputResult.model.text.length - (inputResult.model.piece.decorator?.key?.length ?: 0)
-        }
-    }
 }

@@ -11,6 +11,7 @@ import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
 import com.jjrodcast.textkit.editor.core.models.PieceParagraph
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
+import com.jjrodcast.textkit.editor.utils.replaceLineBreakWith
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toLevel
 import com.jjrodcast.textkit.editor.core.transactions.lists.models.TextEditorDecoratorTransactionType
@@ -54,6 +55,26 @@ internal object TextTransactionsUtils {
      * sequence (e.g. exiting an empty item with Enter, then typing `3. `), renumber the connected
      * block so following siblings stay in order.
      */
+    /**
+     * The characters a just-matched list pattern already occupies in [paragraph] — what the marker
+     * update must consume from the document. The validated line is the paragraph's literal text
+     * plus the inserted text, so the document's share is exactly the paragraph's text (the marker
+     * text for a task item being revalidated, mirroring the selection in matchesListItemPattern),
+     * line breaks excluded. The previous per-platform arithmetic derived this from the NEW marker
+     * string minus its key — i.e. the tab-prefix length — which equals the typed characters only
+     * for a one-character trigger at level one: an insert carrying the whole pattern found nothing
+     * to consume at the offset and instead swallowed the line's terminating break and sheared the
+     * first character off the next item's marker (issue #138).
+     */
+    internal fun patternTextInDocumentLength(paragraph: PieceParagraph): Int {
+        val paragraphText = if (paragraph.startPiece.decorator is TextDecoratorModel.TaskDecoratorModel) {
+            paragraph.startText
+        } else {
+            paragraph.text
+        }
+        return paragraphText.replaceLineBreakWith("").length
+    }
+
     internal fun numberedListReorderAfterPatternInsert(
         lines: MultiPieceParagraph,
         paragraph: PieceParagraph,
