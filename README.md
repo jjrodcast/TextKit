@@ -5,16 +5,16 @@
 TextKit is a rope-backed, piece-table rich-text editor engine for **Compose Multiplatform**
 (Android, iOS, Desktop/JVM and Web — Wasm & JS). It ships a `TextKitState` holder, ready-made
 editor composables, a formatting bar, link popups, **paragraph alignment** (left / center / right /
-justify), a generalized **trigger** system (mentions, hashtags, slash commands), **embedded blocks**
+justify), **text direction** (LTR / RTL for scripts such as Arabic or Hebrew), a generalized **trigger** system (mentions, hashtags, slash commands), **embedded blocks**
 (images and other non-renderable content as clickable placeholders, plus fully **editable tables**),
 full **undo/redo** with coalescing, lossless (de)serialization to a **ProseMirror-style JSON
-document**, and export to **HTML** and **GitHub Flavored Markdown**.
+document**, and export to (and import from) **HTML** and **GitHub Flavored Markdown**.
 
 Unlike editors that round-trip through HTML or Markdown, TextKit persists a structured JSON document
 (`type: "doc"` → block nodes → inline runs with marks), so styling, lists, links and inline tokens
 (mentions, hashtags) survive an exact load → edit → export cycle. When you need to share the content,
-`toHtml()` and `toMarkdown()` emit those formats on demand (export only — see
-[Reading the content](#reading-the-content)).
+`toHtml()` and `toMarkdown()` emit those formats on demand, and `importHtml()` / `importMarkdown()`
+load them back (see [Reading the content](#reading-the-content)).
 
 
 ## Table of contents
@@ -27,6 +27,7 @@ Unlike editors that round-trip through HTML or Markdown, TextKit persists a stru
 - [Text style (color & size)](#text-style-color--size)
 - [Lists](#lists)
 - [Text alignment](#text-alignment)
+- [Text direction (LTR / RTL)](#text-direction-ltr--rtl)
 - [Links](#links)
 - [Triggers: mentions, hashtags & slash commands](#triggers-mentions-hashtags--slash-commands)
 - [Embedded blocks](#embedded-blocks)
@@ -99,6 +100,7 @@ Observable properties you can read in composition:
 | `activeColorAnchor` | `Rect?` | Window bounds the color picker is anchored to while open, or `null`. Observe it to show `TextKitColorsPopup`. |
 | `currentTextColor` | `Color?` | The selection's current text color, or `null` when it has none. Seeds the color picker's marked swatch. |
 | `currentTextAlign` | `TextAlign?` | Alignment of the paragraph(s) at the caret/selection, or `null` for a "mixed" selection (paragraphs with differing alignment). Marks the active alignment button. |
+| `currentTextDirection` | `TextDirection?` | Writing direction (`Ltr` / `Rtl`) of the paragraph(s) at the caret/selection, or `null` for a "mixed" selection. Marks the active direction button. |
 | `activeAlignAnchor` | `Rect?` | Window bounds the alignment picker is anchored to while open, or `null`. Observe it to show `TextKitAlignPopup`. |
 | `canUndo` / `canRedo` | `Boolean` | Whether an undo / redo step is available (drives toolbar button enablement). |
 | `viewerTextValue` | `Pair<AnnotatedString, Map<String, InlineTextContent>>` | Rendered content for read-only display. |
@@ -125,7 +127,8 @@ val markdown: String = state.toMarkdown()
 by `toJson()`. It emits semantic markup (`<strong>`, `<em>`, `<blockquote>`, …) rather than inline
 styles; the one exception is a text style (colour + font size), which has no semantic equivalent and
 becomes a `<span style="…">`. Paragraph alignment is emitted as `style="text-align:…"` on the block
-(only when it is not the default `left`). Task items keep a real, enabled `<input type="checkbox">` so
+(only when it is not the default `left`), and a right-to-left block (`<p>`, `<hN>`, `<ul>`, `<ol>`,
+`<blockquote>`) carries the native `dir="rtl"` attribute (LTR, the default, is never emitted). Task items keep a real, enabled `<input type="checkbox">` so
 the exported markup stays interactive, and inline tokens carry their identity on `data-type` / `data-id`:
 
 ```html
@@ -137,8 +140,10 @@ the exported markup stays interactive, and inline tokens carry their identity on
 
 `toMarkdown()` is **export only** too, and targets **GitHub Flavored Markdown** — task lists, tables
 and `~~strikethrough~~` are all native. It is deliberately **lossy**: marks GFM has no syntax for
-(underline, highlight, a colour/size text style, paragraph alignment) fall back to inline HTML (`<u>`,
-`<mark>`, `<span style="…">`, `<p style="text-align:…">`), inline tokens become plain `@label` /
+(underline, highlight, a colour/size text style, paragraph alignment, text direction) fall back to
+inline HTML (`<u>`, `<mark>`, `<span style="…">`, `<p style="text-align:…">`, `<p dir="rtl">`); an
+RTL list or blockquote is wrapped in a `<div dir="rtl">` block, since their Markdown syntax takes no
+attributes. Inline tokens become plain `@label` /
 `#label` text (their `data-id` identity is dropped), and a blank paragraph has no Markdown form. Keep
 `toJson()` for a lossless round-trip;
 reach for `toMarkdown()` when sharing to a Markdown surface (READMEs, chat, notes).
@@ -147,6 +152,18 @@ reach for `toMarkdown()` when sharing to a Markdown surface (READMEs, chat, note
 Hi @ada
 
 - [x] done
+```
+
+### Importing HTML or Markdown
+
+`importHtml(html)` and `importMarkdown(markdown)` replace the document with the converted content (the
+same conversion paste uses). Both read back what the exporters emit, including `dir="rtl"` and, for
+Markdown, the `<p dir="rtl">` / `<div dir="rtl">` fallbacks. Like the exports, the conversion is lossy
+for anything the format cannot carry — keep `toJson()` for persistence.
+
+```kotlin
+state.importHtml("<p dir=\"rtl\">مرحبا</p>")
+state.importMarkdown("<div dir=\"rtl\">\n\n- واحد\n- اثنان\n\n</div>")
 ```
 
 ## Inline styling
@@ -214,7 +231,7 @@ The alignment at the caret is exposed via `state.currentTextAlign` (`TextAlign?`
 the selection spans paragraphs with differing alignment (a "mixed" selection). Alignment
 round-trips losslessly through the JSON document as the ProseMirror/TipTap `textAlign` attribute on
 `paragraph` and `heading` nodes (see [Document format](#document-format)); the default `Left` is
-omitted from `attrs`.
+written as `"left"`.
 
 ### Alignment popup
 
@@ -234,6 +251,37 @@ Box {
 **Related state APIs:** `state.openAlignPicker(bounds)` / `state.dismissAlignPicker()` (show/hide the
 popup) and `state.activeAlignAnchor` (observable anchor, non-null while open). The formatting bar's
 alignment button hands you its bounds via `onTextAlignClick` (see [Formatting bar](#formatting-bar)).
+
+## Text direction (LTR / RTL)
+
+Set the writing direction of the paragraph(s) the selection touches — `Ltr` (the default) or `Rtl`
+for right-to-left scripts such as Arabic or Hebrew. Like alignment it is a **paragraph attribute**,
+so it works with a collapsed caret. `applyTextDirection` returns whether the document changed:
+
+```kotlin
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
+
+state.applyTextDirection(TextDirection.Rtl)
+state.applyTextDirection(TextDirection.Ltr)   // back to the default
+```
+
+Lists and blockquotes carry the direction on the **container node**, not per item: with the caret
+inside a list or a quote, the whole list / quote flips (adjacent lists with nothing between them
+count as one). Nested content inherits its container's direction, and RTL wins when a block and its
+container disagree.
+
+An RTL paragraph renders with a right-to-left base direction, and its default `Left` alignment
+follows the direction (it starts at the right edge); an explicit center / right / justify is kept.
+List markers and the quote bar move to the right edge, in both the editor and viewer mode.
+
+The direction at the caret is exposed via `state.currentTextDirection` (`TextDirection?`, `null` for a
+mixed selection). `TextKitAlignPopup` includes **Left to right** / **Right to left** buttons next to
+the alignment options, so the formatting bar's alignment button covers both.
+
+Direction round-trips through the JSON document as the `dir` attribute on `paragraph`, `heading`,
+`blockquote`, `bulletList` and `orderedList` (see [Document format](#document-format)), through HTML as
+`dir="rtl"`, and through Markdown via its inline-HTML fallbacks (see
+[Reading the content](#reading-the-content)).
 
 ## Links
 
@@ -692,7 +740,19 @@ list of block nodes; each block holds inline runs, and inline runs carry `marks`
 **Block nodes:** `paragraph`, `heading` (`attrs.level` 1–6), `orderedList`, `bulletList`, `taskList`,
 `blockquote`, plus `listItem` / `taskItem` (`attrs.checked`) inside lists. `paragraph` and `heading`
 also carry an optional `attrs.textAlign` (`"left"` | `"center"` | `"right"` | `"justify"`); the
-default `"left"` is omitted, and any unrecognized value coerces back to `"left"` on load.
+default `"left"` is written on export, and any unrecognized value coerces back to `"left"` on load.
+`paragraph`, `heading`, `blockquote`, `bulletList` and `orderedList` carry `attrs.dir` (`"ltr"` |
+`"rtl"`): the default `"ltr"` is always written, any unrecognized value coerces to `"ltr"`, and on a
+list or blockquote it applies to everything inside it. `taskList` has no `dir` of its own and follows
+its container.
+
+```json
+{ "type": "bulletList", "attrs": { "dir": "rtl" }, "content": [
+  { "type": "listItem", "content": [
+    { "type": "paragraph", "content": [{ "type": "text", "text": "مرحبا" }] }
+  ]}
+]}
+```
 
 **Inline nodes:** `text`, `hardBreak`, and atomic trigger tokens `mention` and `hashtag` (both with
 `attrs.id`, `attrs.label`). Slash (`/`) commands are ephemeral actions and are **not** persisted as

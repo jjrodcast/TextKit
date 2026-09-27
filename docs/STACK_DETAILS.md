@@ -16,7 +16,7 @@ Key characteristics:
 
 - **Piece table storage** — a classic two-buffer design (immutable `originalBuffer` + append-only `addedBuffer`) so edits never copy the whole text.
 - **Rope index** — a balanced rope (`PieceRope` / `RopeNode`) is the single source of truth for the piece sequence, keeping lookups and mutations at **O(log P)** in the number of pieces.
-- **Rich formatting** — bold, italic, underline, strikethrough, highlight, links, and text style (color + font size), plus block structures: headings (h1–h6), ordered / bullet / task lists, and blockquotes.
+- **Rich formatting** — bold, italic, underline, strikethrough, highlight, links, and text style (color + font size), plus block structures: headings (h1–h6), ordered / bullet / task lists, and blockquotes, each with an LTR / RTL writing direction (`dir`).
 - **Incremental plain-text cache** — plain text is cached and patched in place rather than rebuilt on every edit.
 - **Compose integration** — `TextKitState` binds the engine to a `BasicTextField`, exposing `textFieldValue`, selection helpers, link info, and a ready-to-render `AnnotatedString` for viewer mode.
 - **Ready-made UI** — drop-in composables: `TextKitEditor` (the editable field), `TextKitFormattingBar` (bold / italic / underline / strike / highlight, links, ordered & bulleted lists), and `TextKitLinkPopup` — a speech-bubble card with a rounded pointer for adding, editing, and removing links.
@@ -233,12 +233,12 @@ Node / mark reference:
 
 | Kind | `type` | Notable `attrs` / fields |
 | --- | --- | --- |
-| Block | `paragraph` | — |
-| Block | `heading` | `level`: 1–6 (map to fixed font sizes) |
-| Block | `orderedList` | `start`: first number (default `1`); `content` is `listItem`s |
-| Block | `bulletList` | `content` is `listItem`s |
-| Block | `taskList` | `content` is `taskItem`s |
-| Block | `blockquote` | `content` is block nodes (kept only in `isViewer = true`) |
+| Block | `paragraph` | `textAlign`, `dir`: `"ltr"` (default) \| `"rtl"` |
+| Block | `heading` | `level`: 1–6 (map to fixed font sizes); `textAlign`, `dir` |
+| Block | `orderedList` | `start`: first number (default `1`); `dir` (applies to the whole list); `content` is `listItem`s |
+| Block | `bulletList` | `dir` (applies to the whole list); `content` is `listItem`s |
+| Block | `taskList` | `content` is `taskItem`s (no `dir`; follows its container) |
+| Block | `blockquote` | `dir` (applies to the whole quote); `content` is block nodes (kept only in `isViewer = true`) |
 | Item | `listItem` | `content` is block nodes (usually a `paragraph`) |
 | Item | `taskItem` | `attrs.checked`: `Boolean`; `content` is block nodes |
 | Inline | `text` | `text`: `String`; optional `marks` |
@@ -246,6 +246,8 @@ Node / mark reference:
 | Mark | `bold` / `italic` / `underline` / `strike` / `highlight` | — |
 | Mark | `link` | `attrs.href`: `String`, `attrs.target`: `String` |
 | Mark | `textStyle` | `attrs.color`: hex `String?`, `attrs.fontSize`: `Int` |
+
+> `dir` is stored per piece like `textAlign` (`RichPiece.textDirection`). On load a list or blockquote passes its direction down to everything inside it (RTL wins when a block and its container disagree); on export the container's `dir` is resolved from its items. An unknown `dir` value coerces to `"ltr"`.
 
 > Unknown `type`s fall back to a `None` node/mark rather than failing to parse. Full, real-world fixtures (with nested lists, mixed colors, etc.) live in `editor/utils/DocumentUtils.kt` as `complexJsonV1`–`complexJsonV6` and `emptyDocument` — pass any of them straight to `load(...)`. Load an empty document with `"{}"`.
 
@@ -258,8 +260,8 @@ Node / mark reference:
 | `text: String` | Current plain-text stream (with decorator markers / line breaks). |
 | `toJson(): String` | Serialize the document to ProseMirror-style JSON. |
 | `isViewer: Boolean` | Whether the manager was loaded in viewer mode. |
-| `getParagraphs(): List<TextEditorParagraph>` | Document as a list of paragraphs, each holding `TextEditorItem`s (text, `start`/`end` offsets, marks, decorator). Ideal for rendering. |
-| `getSearchMarkType(selection: TextRange): MarkSearchType` | Marks, list item, range, and text active over a selection. Use it to reflect toolbar state. |
+| `getParagraphs(): List<TextEditorParagraph>` | Document as a list of paragraphs, each holding `TextEditorItem`s (text, `start`/`end` offsets, marks, decorator) plus the paragraph's `textAlign` and `textDirection`. Ideal for rendering. |
+| `getSearchMarkType(selection: TextRange): MarkSearchType` | Marks, list item, range, text, `textAlign` and `textDirection` active over a selection (`null` alignment/direction = mixed). Use it to reflect toolbar state. |
 | `getLink(start: Int, end: Int): Pair<String?, TextRange>` | The href (if any) covering a range, plus the range it spans. |
 | `checkDecorator(start: Int, end: Int): Pair<Boolean, TextRange>` | Whether the range contains a decorator (list/task marker) and its range. |
 | `onDecoratorChange(offset: Int)` | Toggle the decorator at an offset (e.g. check/uncheck a task item). |
@@ -270,6 +272,8 @@ Node / mark reference:
 - **`Format`** (default) — apply the mark/list-item difference between `prevSelectedMark` and `currSelectedMark`.
 - **`Link(href)`** — put the `LinkMark` in `currSelectedMark.marks`; an empty href removes the link.
 - **`Color(color)`** — set (or clear, with `null`) the text color, preserving the existing font size. `prev`/`curr` marks are ignored and resolved from the selection.
+- **`Alignment(textAlign)`** — set the paragraph alignment of every paragraph the selection touches (works with a collapsed caret).
+- **`Direction(textDirection)`** — set the writing direction (`TextDirection.Ltr` / `Rtl`) of every paragraph the selection touches; inside a list or blockquote the whole container changes, since `dir` lives on the container node. Works with a collapsed caret.
 
 ### Example: querying and formatting a selection
 
@@ -361,6 +365,7 @@ val state = rememberTextKitState(
 | `lastMarks` / `lastListItem` | The marks / list-item type active at the caret. Drive the formatting bar from these. |
 | `applyBold`, `applyItalic`, `applyUnderline`, `applyStrikeThrough`, `applyHighlight` | Toggle a mark on the current selection — `apply…(true)` adds it, `apply…(false)` removes it. |
 | `applyTextStyle(fontSize, color)` | Set the font size and/or color (`color` is a hex string, or `null` to clear). |
+| `applyTextDirection(textDirection)` / `currentTextDirection` | Set LTR / RTL on the paragraph(s) — or the whole list/blockquote — at the selection; `currentTextDirection` is the direction at the caret (`null` when mixed). |
 | `toggleOrderedList(selected)` / `toggleUnorderedList(selected)` | Convert the paragraph(s) the selection touches to a numbered / bulleted list (`true`) or back to a plain paragraph (`false`). Switches kind in place and works with a collapsed caret. |
 | `applyLink()` | Open `TextKitLinkPopup` for the current selection, or for the word under a collapsed caret; pre-fills the URL when that text already has a link. |
 | `updateLink(url, range)` | Add / replace the link over `range` (empty `url` removes it). Leaves a collapsed caret at the end and closes the popup. |
