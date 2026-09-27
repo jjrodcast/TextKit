@@ -7,6 +7,7 @@ import com.jjrodcast.textkit.editor.core.models.TextEditorDocumentModel
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPieceTransaction
 import com.jjrodcast.textkit.editor.core.piecetable.models.Source
@@ -425,6 +426,83 @@ internal abstract class RichTextEditorBasePieceTable :
     }
 
     /**
+     * Sets the paragraph-level [textDirection] on every piece of each paragraph that intersects
+     * [[start], [end]] — same retagging as [updateTextAlign], so it also works with a collapsed caret.
+     *
+     * Lists and blockquotes carry `dir` on the container node (`bulletList`, `orderedList`,
+     * `blockquote`), not per item, so when the range's first/last paragraph belongs to one the range
+     * is widened to the whole container (see [containerStartOffset] / [containerEndOffset]): every
+     * item of the list — or paragraph of the quote — flips together and what the editor shows matches
+     * what the export writes. O(R log P) for R affected pieces plus O(K log P) for the K container
+     * paragraphs walked. Returns whether any piece changed.
+     */
+    internal fun updateTextDirection(start: Int, end: Int, textDirection: TextDirection): Boolean {
+        val selected = getLineContent(start, end).paragraphsInSelectedRange
+        if (selected.isEmpty()) return false
+        val first = selected.first()
+        val last = selected.last()
+        val from = if (first.directionContainer == DirectionContainer.None) start else containerStartOffset(first)
+        val to = if (last.directionContainer == DirectionContainer.None) end else containerEndOffset(last)
+        var changed = false
+        getLineContent(from, to).paragraphsInSelectedRange.fastForEach { paragraph ->
+            paragraph.pieces.fastForEach { model ->
+                if (model.piece.textDirection == textDirection) return@fastForEach
+                val index = getIndexOf(model)
+                if (index < 0) return@fastForEach
+                rope.replaceAt(index, model.piece.copy(textDirection = textDirection))
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    /** Which container node a paragraph belongs to, for [updateTextDirection]'s range widening. */
+    private enum class DirectionContainer { None, List, Blockquote }
+
+    private val PieceParagraph.directionContainer: DirectionContainer
+        get() = when {
+            isListItem -> DirectionContainer.List
+            pieces.any { it.piece.decorator is TextDecoratorModel.BlockquoteDecorator } -> DirectionContainer.Blockquote
+            else -> DirectionContainer.None
+        }
+
+    /**
+     * Document offset where the container holding [paragraph] starts: walks back over consecutive
+     * paragraphs of the same container kind (any contiguous list items count as one list).
+     */
+    private fun containerStartOffset(paragraph: PieceParagraph): Int {
+        val container = paragraph.directionContainer
+        var current = paragraph
+        while (current.startOffset > 0) {
+            val previousEnd = current.startOffset - 1
+            val previous = findFastPiecesMultiLine(previousEnd, previousEnd)
+                .lastOrNull { it.startOffset <= previousEnd } ?: break
+            if (previous.startOffset >= current.startOffset || previous.directionContainer != container) break
+            current = previous
+        }
+        return current.startOffset
+    }
+
+    /**
+     * Mirror of [containerStartOffset]: the end offset of the last paragraph in [paragraph]'s
+     * container. A range ending exactly there selects that paragraph (so an empty last item is not
+     * missed) without touching the next one.
+     */
+    private fun containerEndOffset(paragraph: PieceParagraph): Int {
+        val container = paragraph.directionContainer
+        var current = paragraph
+        while (true) {
+            val nextStart = current.endOffset + current.endPiece.length
+            if (nextStart >= rope.totalLength) break
+            val next = findFastPiecesMultiLine(nextStart, nextStart + 1)
+                .firstOrNull { it.startOffset >= nextStart } ?: break
+            if (next.directionContainer != container) break
+            current = next
+        }
+        return current.endOffset + current.endPiece.length
+    }
+
+    /**
      * Stamps or removes the blockquote attribute on every PLAIN paragraph the range touches (#126).
      * Paragraph-level like [updateTextAlign] — runs for a collapsed caret too. List items and embed
      * placeholders are skipped: a quote holds plain paragraphs in this phase.
@@ -529,6 +607,7 @@ internal abstract class RichTextEditorBasePieceTable :
                         decorator = model.piece.decorator,
                         token = model.piece.token,
                         textAlign = model.piece.textAlign,
+                        textDirection = model.piece.textDirection,
                         isLineBreak = pieceText.isLineBreak(),
                         endsWithLineBreak = pieceText.endsWithLineBreak()
                     )

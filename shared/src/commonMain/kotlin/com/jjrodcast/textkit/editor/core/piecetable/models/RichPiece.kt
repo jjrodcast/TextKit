@@ -2,6 +2,7 @@ package com.jjrodcast.textkit.editor.core.piecetable.models
 
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.utils.intersect
 import kotlinx.serialization.Serializable
 
@@ -17,6 +18,10 @@ internal data class RichPiece(
     // rope's split/merge/splice operations via `copy()`. Read back on serialization from the
     // paragraph's pieces (see PieceTableConverter).
     val textAlign: TextAlign = TextAlign.Left,
+    // Paragraph-level writing direction (`dir` attr), stored per-piece exactly like [textAlign]. For
+    // lists and blockquotes it is the direction of the whole container node, stamped onto every
+    // paragraph inside it.
+    val textDirection: TextDirection = TextDirection.Ltr,
     // When non-null this piece is an atomic trigger token (mention, hashtag, …): its visible text is
     // "<triggerKey><label>" and its identity (type + id + label) lives here so it survives the
     // piece-table round-trip and can be serialized back to the right inline node. Selection/editing

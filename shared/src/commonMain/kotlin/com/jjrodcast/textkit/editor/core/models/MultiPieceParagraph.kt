@@ -252,6 +252,7 @@ internal data class MultiPieceParagraph(
         // Alignment common to every paragraph the selection touches; null means a "mixed" selection
         // (paragraphs with differing alignment) so a toolbar can show nothing as active.
         val textAlign = paragraphsInSelectedRange.map { it.textAlign }.toSet().singleOrNull()
+        val textDirection = paragraphsInSelectedRange.map { it.textDirection }.toSet().singleOrNull()
         return when {
             data.isEmpty() -> MarkSearchType()
             // When the size is 2 and the range is collapsed means that the cursor is in the middle of 2 pieces,
@@ -274,7 +275,8 @@ internal data class MultiPieceParagraph(
                         listItem = element.paragraphType,
                         range = newRange,
                         text = element.text.removeLineBreakSuffix(),
-                        textAlign = textAlign
+                        textAlign = textAlign,
+                        textDirection = textDirection
                     )
                 } else {
                     val textStart = start - element.offsetInDocument
@@ -284,7 +286,8 @@ internal data class MultiPieceParagraph(
                         listItem = element.paragraphType,
                         range = range,
                         text = text,
-                        textAlign = textAlign
+                        textAlign = textAlign,
+                        textDirection = textDirection
                     )
                 }
             }
@@ -300,7 +303,7 @@ internal data class MultiPieceParagraph(
                     if (it is TextStyleMark && TextStyleMark.isDefault(it, configuration)) null
                     else it
                 }.toSet()
-                MarkSearchType(filteredMarks, listItemType, range, text, textAlign)
+                MarkSearchType(filteredMarks, listItemType, range, text, textAlign, textDirection)
             }
         }
     }

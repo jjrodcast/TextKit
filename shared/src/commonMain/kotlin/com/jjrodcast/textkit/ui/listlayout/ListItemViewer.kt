@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.TextMeasurer
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorItem
@@ -47,6 +49,8 @@ internal sealed interface ViewerBlock {
         val content: AnnotatedString,
         val inlineContent: Map<String, InlineTextContent>,
         val textAlign: TextKitTextAlign,
+        /** Right-to-left item: the whole row (gutter + content) is mirrored. */
+        val rtl: Boolean = false,
     ) : ViewerBlock
 
     data class Paragraph(
@@ -54,6 +58,8 @@ internal sealed interface ViewerBlock {
         val inlineContent: Map<String, InlineTextContent>,
         /** Whether the paragraph carries the blockquote attribute (#126) — renders the quote bar. */
         val quoted: Boolean = false,
+        /** Right-to-left paragraph: a quoted one draws its bar on the right. */
+        val rtl: Boolean = false,
     ) : ViewerBlock
 }
 
@@ -73,10 +79,16 @@ internal fun buildViewerBlocks(
             content = content,
             inlineContent = inlineContent,
             textAlign = paragraph.textAlign,
+            rtl = paragraph.isRtl(),
         )
     } else {
         val (text, inlineContent) = buildParagraph(paragraph, true)
-        ViewerBlock.Paragraph(text = text, inlineContent = inlineContent, quoted = paragraph.isQuoted())
+        ViewerBlock.Paragraph(
+            text = text,
+            inlineContent = inlineContent,
+            quoted = paragraph.isQuoted(),
+            rtl = paragraph.isRtl(),
+        )
     }
 }
 
@@ -104,28 +116,32 @@ internal fun TextKitViewerBlocks(
                     content = block.content,
                     inlineContent = block.inlineContent,
                     textAlign = block.textAlign,
+                    rtl = block.rtl,
                     lineStyle = lineStyle,
                     markerColumnWidth = markerColumnWidth,
                 )
 
                 is ViewerBlock.Paragraph -> if (block.quoted) {
                     // Quoted paragraph: accent bar + indent, the blockquote's visual treatment.
-                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .fillMaxHeight()
-                                .background(
-                                    color = TextKitTheme.colors.onSurfaceVariant,
-                                    shape = RoundedCornerShape(2.dp)
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        BasicText(
-                            text = block.text,
-                            inlineContent = block.inlineContent,
-                            style = lineStyle,
-                        )
+                    // Mirrored for RTL so the bar sits on the right, where the paragraph starts.
+                    WithRowDirection(rtl = block.rtl) {
+                        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        color = TextKitTheme.colors.onSurfaceVariant,
+                                        shape = RoundedCornerShape(2.dp)
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            BasicText(
+                                text = block.text,
+                                inlineContent = block.inlineContent,
+                                style = lineStyle,
+                            )
+                        }
                     }
                 } else BasicText(
                     text = block.text,
@@ -143,10 +159,11 @@ private fun ListItemRow(
     content: AnnotatedString,
     inlineContent: Map<String, InlineTextContent>,
     textAlign: TextKitTextAlign,
+    rtl: Boolean,
     lineStyle: TextStyle,
     markerColumnWidth: Dp,
     modifier: Modifier = Modifier,
-) {
+) = WithRowDirection(rtl = rtl) {
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val indentLabel = gutter.viewerIndentLabel()
@@ -172,7 +189,7 @@ private fun ListItemRow(
         BasicText(
             text = content,
             inlineContent = inlineContent,
-            style = lineStyle.copy(textAlign = textAlign.toComposeTextAlign()),
+            style = lineStyle.copy(textAlign = textAlign.toComposeTextAlign()).withTextDirection(rtl),
             modifier = Modifier
                 .weight(1f)
                 .padding(start = 4.dp),
@@ -268,6 +285,16 @@ private fun viewerMeasuredWidth(
     }
 }
 
+/**
+ * Lays [content] out right-to-left when [rtl] — a Row then places its first child on the right and
+ * `start` paddings apply on the right — otherwise keeps the ambient layout direction.
+ */
+@Composable
+private fun WithRowDirection(rtl: Boolean, content: @Composable () -> Unit) {
+    if (rtl) CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, content = content)
+    else content()
+}
+
 private val TASK_CHECKBOX_COLUMN_WIDTH = 24.dp
 private val TASK_CHECKBOX_SIZE = 20.dp
 
@@ -291,7 +318,7 @@ internal fun buildViewerParagraphContent(
     } else {
         toComposeAlign(paragraph.textAlign)
     }
-    withStyle(defaultStyle.copy(textAlign = composeAlign)) {
+    withStyle(defaultStyle.copy(textAlign = composeAlign).withTextDirection(paragraph.isRtl())) {
         paragraph.children.forEach { child ->
             if (!includeDecorator && child.decorator != null) return@forEach
             appendChild(child)

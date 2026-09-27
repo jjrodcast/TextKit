@@ -8,6 +8,8 @@ import com.jjrodcast.textkit.editor.core.models.TextEditorModel.Companion.getKey
 import com.jjrodcast.textkit.editor.core.models.TextEditorParagraphModel
 import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
 import com.jjrodcast.textkit.editor.core.parser.Blockquote
+import com.jjrodcast.textkit.editor.core.parser.BlockquoteAttrs
+import com.jjrodcast.textkit.editor.core.parser.BulletListAttrs
 import com.jjrodcast.textkit.editor.core.parser.BaseText
 import com.jjrodcast.textkit.editor.core.parser.BulletedList
 import com.jjrodcast.textkit.editor.core.parser.EmbedTokenType
@@ -21,6 +23,7 @@ import com.jjrodcast.textkit.editor.core.parser.Paragraph
 import com.jjrodcast.textkit.editor.core.parser.ParagraphAttrs
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.parser.TaskListAttrs
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
@@ -282,13 +285,18 @@ internal object PieceTableConverter {
      * the blockquote attribute any of the paragraph's pieces carries; adjacency defines the node,
      * so two blockquotes with nothing between them normalize into one — the same result their
      * rendering already shows. Only plain paragraphs join a quote; a list or embed ends it.
+     *
+     * The quote's `dir` is RTL when any of its paragraphs is: a direction change always retags the
+     * whole quote, so its paragraphs normally agree, and RTL wins a disagreement like on load.
      */
     private fun groupBlockquotes(content: List<Pair<BaseParagraph, Boolean>>): List<BaseParagraph> {
         val result = arrayListOf<BaseParagraph>()
         val run = arrayListOf<BaseParagraph>()
         fun flush() {
             if (run.isEmpty()) return
-            result.add(Blockquote(content = ArrayList(run)))
+            val dir = if (run.any { (it as? Paragraph)?.attrs?.dir == TextDirection.Rtl }) TextDirection.Rtl
+            else TextDirection.Ltr
+            result.add(Blockquote(attrs = BlockquoteAttrs(dir = dir), content = ArrayList(run)))
             run.clear()
         }
         content.fastForEach { (node, quoted) ->
@@ -345,7 +353,10 @@ internal object PieceTableConverter {
             }
         } else {
             Paragraph(
-                attrs = ParagraphAttrs(textAlign = item.textStyled.resolveTextAlign()),
+                attrs = ParagraphAttrs(
+                    textAlign = item.textStyled.resolveTextAlign(),
+                    dir = item.textStyled.resolveTextDirection()
+                ),
                 content = item.getParagraphContent()
             )
         }
@@ -474,6 +485,10 @@ internal object PieceTableConverter {
                     }
                 }
             }
+            // A list's `dir` lives on the list node: RTL when any of its items is (a direction change
+            // retags the whole list, so the items normally agree).
+            val listDir = if (value.any { it.textStyled.resolveTextDirection() == TextDirection.Rtl }) TextDirection.Rtl
+            else TextDirection.Ltr
             // Create the base items
             when (key) {
                 NUMBERED_LIST_KEY -> {
@@ -481,14 +496,14 @@ internal object PieceTableConverter {
                         value.first().textStyled.firstOrNull()?.piece?.decorator as? NumberDecoratorModel
                     finalList.add(
                         OrderedList(
-                            attrs = ListAttrs(start = attrs?.count ?: 1),
+                            attrs = ListAttrs(start = attrs?.count ?: 1, dir = listDir),
                             content = innerItems
                         )
                     )
                 }
 
                 BULLETED_LIST_KEY -> {
-                    finalList.add(BulletedList(content = innerItems))
+                    finalList.add(BulletedList(attrs = BulletListAttrs(dir = listDir), content = innerItems))
                 }
 
                 TASK_LIST_KEY -> {
@@ -592,6 +607,7 @@ internal object PieceTableConverter {
         // 2. Return the list of paragraphs
         return internalParagraphs.fastMap { paragraph ->
             val textAlign = paragraph.styledText.resolveTextAlign()
+            val dir = paragraph.styledText.resolveTextDirection()
             // A zero-length piece (an edit remnant) must not become an empty text node — invalid
             // ProseMirror, silently dropped on reload (issue #61). A lone line-break piece is the
             // same case one step removed: toInlineNode strips the break and leaves "" (a loaded
@@ -601,8 +617,9 @@ internal object PieceTableConverter {
                 .mapNotNull { if (it.isDecorator || it.text.isEmpty() || it.text.isLineBreak()) null else it }
                 .fastMap { it.toInlineNode() }
 
-            if (texts.isEmpty()) Paragraph(attrs = ParagraphAttrs(textAlign = textAlign))
-            else Paragraph(attrs = ParagraphAttrs(textAlign = textAlign), content = texts)
+            val attrs = ParagraphAttrs(textAlign = textAlign, dir = dir)
+            if (texts.isEmpty()) Paragraph(attrs = attrs)
+            else Paragraph(attrs = attrs, content = texts)
         }
     }
 
@@ -614,4 +631,11 @@ internal object PieceTableConverter {
      */
     private fun List<TextEditorModel>.resolveTextAlign(): TextAlign =
         firstOrNull { it.piece.textAlign != TextAlign.Left }?.piece?.textAlign ?: TextAlign.Left
+
+    /**
+     * Resolves a paragraph's writing direction from its pieces, with the same first-non-default rule
+     * as [resolveTextAlign], falling back to [TextDirection.Ltr].
+     */
+    private fun List<TextEditorModel>.resolveTextDirection(): TextDirection =
+        if (any { it.piece.textDirection == TextDirection.Rtl }) TextDirection.Rtl else TextDirection.Ltr
 }

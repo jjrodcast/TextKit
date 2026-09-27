@@ -2,12 +2,14 @@ package com.jjrodcast.textkit.ui.listlayout
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -88,6 +90,7 @@ internal object ListItemEditorTransform {
         splitLayout: Boolean,
     ): ParagraphStyle {
         val base = defaultStyle.copy(textAlign = toComposeAlign(paragraph.textAlign))
+            .withTextDirection(paragraph.isRtl())
         if (!splitLayout) {
             // Quoted paragraphs indent so the quote bar overlay has room at the container start.
             return if (paragraph.isQuoted()) base.copy(textIndent = TextIndent(firstLine = QUOTE_INDENT, restLine = QUOTE_INDENT)) else base
@@ -200,13 +203,26 @@ internal fun ListItemEditorGutterOverlay(
         // metrics the marker rendered at the box top, visibly above its own item's baseline (#137).
         val markerStyle = textStyle.copy(color = textColor).withListLineMetrics()
         markers.forEach { marker ->
-            Text(
-                text = marker.label,
-                style = markerStyle,
-                modifier = Modifier.offset {
-                    IntOffset(x = 0, y = marker.top.roundToInt())
+            if (marker.rtl) {
+                // An RTL item starts at the right edge, so its marker sits there too (the kept
+                // marker space that reserves the gutter is laid out on that side as well).
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset { IntOffset(x = 0, y = marker.top.roundToInt()) },
+                    contentAlignment = AbsoluteAlignment.TopRight,
+                ) {
+                    Text(text = marker.label, style = markerStyle)
                 }
-            )
+            } else {
+                Text(
+                    text = marker.label,
+                    style = markerStyle,
+                    modifier = Modifier.offset {
+                        IntOffset(x = 0, y = marker.top.roundToInt())
+                    }
+                )
+            }
         }
     }
 }
@@ -239,18 +255,28 @@ internal fun BlockquoteEditorOverlay(
     Box(modifier = modifier) {
         val density = LocalDensity.current
         bars.forEach { bar ->
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(x = 0, y = bar.top.roundToInt()) }
-                    .size(width = 3.dp, height = with(density) { (bar.bottom - bar.top).toDp() })
-                    .background(color = barColor, shape = RoundedCornerShape(2.dp))
-            )
+            val barModifier = Modifier
+                .size(width = 3.dp, height = with(density) { (bar.bottom - bar.top).toDp() })
+                .background(color = barColor, shape = RoundedCornerShape(2.dp))
+            if (bar.rtl) {
+                // An RTL quote indents from the right, so the bar moves to the right edge.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset { IntOffset(x = 0, y = bar.top.roundToInt()) },
+                    contentAlignment = AbsoluteAlignment.TopRight,
+                ) {
+                    Box(modifier = barModifier)
+                }
+            } else {
+                Box(modifier = Modifier.offset { IntOffset(x = 0, y = bar.top.roundToInt()) }.then(barModifier))
+            }
         }
     }
 }
 
 /** One quoted paragraph's accent bar, resolved to the vertical span of its laid-out lines. */
-private data class QuoteBar(val top: Float, val bottom: Float)
+private data class QuoteBar(val top: Float, val bottom: Float, val rtl: Boolean = false)
 
 /** Display indent for quoted paragraphs — the freed space hosts the quote bar. */
 private val QUOTE_INDENT = 1.em
@@ -265,11 +291,11 @@ private fun buildQuoteBars(
     val endOffset = (segment.displayEnd - 1).coerceIn(startOffset, displayLength - 1)
     val top = layoutResult.getLineTop(layoutResult.getLineForOffset(startOffset))
     val bottom = layoutResult.getLineBottom(layoutResult.getLineForOffset(endOffset))
-    QuoteBar(top = top, bottom = bottom)
+    QuoteBar(top = top, bottom = bottom, rtl = segment.rtl)
 }
 
 /** A list marker resolved to the vertical position of the line it belongs to. */
-private data class GutterMarker(val label: String, val top: Float)
+private data class GutterMarker(val label: String, val top: Float, val rtl: Boolean = false)
 
 private fun buildGutterMarkers(
     overlaySegments: List<EditorParagraphSegment>,
@@ -280,5 +306,5 @@ private fun buildGutterMarkers(
     if (label.isEmpty()) return@mapNotNull null
     val displayOffset = segment.displayStart.coerceIn(0, displayLength - 1)
     val lineIndex = layoutResult.getLineForOffset(displayOffset)
-    GutterMarker(label = label, top = layoutResult.getLineTop(lineIndex))
+    GutterMarker(label = label, top = layoutResult.getLineTop(lineIndex), rtl = segment.rtl)
 }

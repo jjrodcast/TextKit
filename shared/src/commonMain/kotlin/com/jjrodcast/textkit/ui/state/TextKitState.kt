@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,7 @@ import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
 import com.jjrodcast.textkit.editor.core.parser.TextAlign as TextKitTextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection as TextKitTextDirection
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
@@ -189,6 +191,14 @@ class TextKitState(
      * alignment). Observe it to mark the active alignment button in the formatting bar.
      */
     var currentTextAlign by mutableStateOf<TextKitTextAlign?>(TextKitTextAlign.Left)
+        private set
+
+    /**
+     * Writing direction (LTR / RTL) of the paragraph(s) at the caret/selection, captured with
+     * [currentTextAlign]. `null` means a "mixed" selection. Observe it to mark the active direction
+     * button in the formatting bar.
+     */
+    var currentTextDirection by mutableStateOf<TextKitTextDirection?>(TextKitTextDirection.Ltr)
         private set
 
     /**
@@ -667,7 +677,21 @@ class TextKitState(
         )
 
     /**
-     * Field range for paragraph-level formatting (alignment). Normalizes list-item carets that sit
+     * Sets the writing direction ([TextKitTextDirection.Ltr] / [TextKitTextDirection.Rtl]) of the
+     * paragraph(s) the current selection touches — or of the whole list/blockquote when the selection
+     * is inside one, since those carry `dir` on the container node. Paragraph-level like
+     * [applyTextAlignment], so a collapsed caret works. Returns whether the document changed.
+     */
+    fun applyTextDirection(textDirection: TextKitTextDirection): Boolean =
+        updateDocument(
+            paragraphOperationRange(),
+            TextEditorSelectedMark.NONE,
+            TextEditorSelectedMark.NONE,
+            TextEditorTransactionType.Direction(textDirection)
+        )
+
+    /**
+     * Field range for paragraph-level formatting (alignment, direction). Normalizes list-item carets that sit
      * on the previous paragraph's line break or in the gutter so the item under the caret is updated.
      */
     private fun paragraphOperationRange(): TextRange {
@@ -976,6 +1000,7 @@ class TextKitState(
         lastMarks = searchType.marks
         lastListItem = searchType.listItem
         currentTextAlign = searchType.textAlign
+        currentTextDirection = searchType.textDirection
         lastEmbedType = embedTypeAtCaret()
         updateLinkHighlight(searchType)
         notifyLinkAtSelection(searchType)

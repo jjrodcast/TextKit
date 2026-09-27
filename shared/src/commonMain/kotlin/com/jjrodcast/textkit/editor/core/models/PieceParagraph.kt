@@ -1,6 +1,7 @@
 package com.jjrodcast.textkit.editor.core.models
 
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.toTextEditorListItem
 import com.jjrodcast.textkit.editor.utils.intersect
@@ -63,6 +64,11 @@ internal data class PieceParagraph(
     val textAlign: TextAlign
         get() = pieces.firstOrNull { it.piece.textAlign != TextAlign.Left }?.piece?.textAlign
             ?: TextAlign.Left
+
+    /** Paragraph-level writing direction resolved like [textAlign]. See [RichPiece.textDirection]. */
+    val textDirection: TextDirection
+        get() = if (pieces.any { it.piece.textDirection == TextDirection.Rtl }) TextDirection.Rtl
+        else TextDirection.Ltr
 
     fun findPiecesInRange(start: Int, end: Int): List<TextEditorModel> {
         return pieces

@@ -267,6 +267,11 @@ internal class TextEditorTransaction(private val configuration: TextKitConfigura
             pieceTable.updateTextAlign(range.min, range.max, transactionType.textAlign) to range
         }
 
+        transactionType is TextEditorTransactionType.Direction -> {
+            // Paragraph-level (container-level for lists/blockquotes), so it also runs for a caret.
+            pieceTable.updateTextDirection(range.min, range.max, transactionType.textDirection) to range
+        }
+
         prevListItem != currListItem -> {
             ListItemTransaction.toggleParagraphsToListItems(this, prevListItem, currListItem, range)
         }

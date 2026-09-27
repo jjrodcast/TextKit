@@ -7,23 +7,65 @@ import kotlinx.serialization.Serializable
 data class LinkAttrs(val href: String, val target: String = "")
 
 @Serializable
-data class TaskListAttrs(val checked: Boolean = false)
+data class TaskListAttrs(val checked: Boolean = false, val dir: TextDirection = TextDirection.Ltr)
 
 @Serializable
-data class ListAttrs(val start: Int = 1)
+data class ListAttrs(val start: Int = 1, val dir: TextDirection = TextDirection.Ltr)
+
+/** Attributes for a `bulletList`: only the writing direction of the whole list. */
+@Serializable
+data class BulletListAttrs(val dir: TextDirection = TextDirection.Ltr)
+
+/** Attributes for a `blockquote`: only the writing direction of the whole quote. */
+@Serializable
+data class BlockquoteAttrs(val dir: TextDirection = TextDirection.Ltr)
 
 @Serializable
 data class HeadingAttrs(
     val level: Int = HeadingLevels.H4,
-    val textAlign: TextAlign = TextAlign.Left
+    val textAlign: TextAlign = TextAlign.Left,
+    val dir: TextDirection = TextDirection.Ltr
 )
 
 /**
- * Attributes for a plain [Paragraph]. Carries the ProseMirror/TipTap `textAlign` attr so paragraph
- * alignment round-trips through the parser.
+ * Attributes for a plain [Paragraph]. Carries the ProseMirror/TipTap `textAlign` and `dir` attrs so
+ * paragraph alignment and writing direction round-trip through the parser.
  */
 @Serializable
-data class ParagraphAttrs(val textAlign: TextAlign = TextAlign.Left)
+data class ParagraphAttrs(
+    val textAlign: TextAlign = TextAlign.Left,
+    val dir: TextDirection = TextDirection.Ltr
+)
+
+/**
+ * Writing direction of a block node (`paragraph`, `heading`, `blockquote`, `bulletList`,
+ * `orderedList`), serialized as the `dir` attr string (the HTML `dir` attribute values). [Rtl] is for
+ * right-to-left scripts such as Arabic or Hebrew. Any other value in a loaded document coerces to
+ * [Ltr] thanks to [TEXT_EDITOR_JSON]'s `coerceInputValues`.
+ */
+@Serializable
+enum class TextDirection {
+    @SerialName(TextDirectionValues.Ltr)
+    Ltr,
+
+    @SerialName(TextDirectionValues.Rtl)
+    Rtl;
+
+    internal companion object {
+        /**
+         * The direction a block nested in a container ends up with: RTL wins when either the block
+         * itself or its container is RTL. [Ltr] is the default, so it cannot override a container's
+         * [Rtl] — an unset `dir` and an explicit `"ltr"` decode to the same value.
+         */
+        fun resolve(own: TextDirection, inherited: TextDirection): TextDirection =
+            if (own == Rtl || inherited == Rtl) Rtl else Ltr
+    }
+}
+
+internal object TextDirectionValues {
+    const val Ltr = "ltr"
+    const val Rtl = "rtl"
+}
 
 /**
  * Horizontal alignment for block nodes (`paragraph`, `heading`), serialized as the

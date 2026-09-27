@@ -2,6 +2,7 @@ package com.jjrodcast.textkit.editor.core.piecetable
 
 import com.jjrodcast.textkit.editor.core.models.TextEditorModel
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.piecetable.models.RichPiece
 import com.jjrodcast.textkit.editor.core.piecetable.models.Source
 import com.jjrodcast.textkit.editor.utils.endsWithLineBreak
@@ -51,6 +52,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                 // safe.
                 token = newOriginalPiece.token,
                 textAlign = newOriginalPiece.textAlign,
+            textDirection = newOriginalPiece.textDirection,
                 isLineBreak = newOriginalPiece.isLineBreak,
                 endsWithLineBreak = charAtEndIsLineBreak(newOriginalPiece.source, newOriginalPiece.offset, headLength)
             )
@@ -67,6 +69,8 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                     // surrounding split pieces already carry it, so prefer theirs over the model's
                     // default when this piece lands between them.
                     textAlign = if (model.piece.textAlign != TextAlign.Left) model.piece.textAlign else newOriginalPiece.textAlign,
+                    // Same inheritance for the writing direction.
+                    textDirection = if (model.piece.textDirection != TextDirection.Ltr) model.piece.textDirection else newOriginalPiece.textDirection,
                     isLineBreak = model.text.isLineBreak(),
                     endsWithLineBreak = model.text.endsWithLineBreak()
                 )
@@ -141,6 +145,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                 decorator = initialPiece.decorator,
                 token = initialPiece.token,
                 textAlign = initialPiece.textAlign,
+            textDirection = initialPiece.textDirection,
                 isLineBreak = leftLength > 0 && initialPiece.isLineBreak,
                 endsWithLineBreak = charAtEndIsLineBreak(initialPiece.source, initialPiece.offset, leftLength)
             )
@@ -154,6 +159,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
                 decorator = finalPiece.decorator,
                 token = finalPiece.token,
                 textAlign = finalPiece.textAlign,
+            textDirection = finalPiece.textDirection,
                 isLineBreak = rightLength > 0 && finalPiece.isLineBreak,
                 // Right piece shares the same buffer end as finalPiece.
                 endsWithLineBreak = rightLength > 0 && finalPiece.endsWithLineBreak
@@ -210,6 +216,7 @@ internal class RichTextEditorPieceTable : RichTextEditorBasePieceTable() {
             decorator = originalPiece.decorator,
             token = originalPiece.token,
             textAlign = originalPiece.textAlign,
+            textDirection = originalPiece.textDirection,
             isLineBreak = remainingText.isLineBreak(),
             endsWithLineBreak = remainingText.endsWithLineBreak()
         )

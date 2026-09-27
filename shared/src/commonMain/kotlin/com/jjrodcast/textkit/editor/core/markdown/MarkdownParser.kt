@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.editor.core.markdown
 
+import com.jjrodcast.textkit.editor.core.export.ExportHtml
 import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
 import com.jjrodcast.textkit.editor.core.parser.BaseText
 import com.jjrodcast.textkit.editor.core.parser.Blockquote
@@ -20,12 +21,15 @@ import com.jjrodcast.textkit.editor.core.parser.ListItem
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.OrderedList
 import com.jjrodcast.textkit.editor.core.parser.Paragraph
+import com.jjrodcast.textkit.editor.core.parser.ParagraphAttrs
 import com.jjrodcast.textkit.editor.core.parser.StrikeMark
 import com.jjrodcast.textkit.editor.core.parser.TEXT_EDITOR_JSON
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListAttrs
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
+import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
 import kotlinx.serialization.json.JsonElement
@@ -45,6 +49,10 @@ import kotlinx.serialization.json.put
  * highlight and hard breaks), a code span keeps its inner text, an inline image degrades to its
  * alt text, and any line no block rule claims is a paragraph. Soft line breaks inside a paragraph
  * join with a space, the CommonMark rendering.
+ *
+ * The exporter's block-level HTML fallbacks are recognized too: a one-line `<p>`/`<hN>` restores its
+ * `dir` and `text-align`, and a `<div dir="rtl">` HTML block makes the lists, quotes and paragraphs
+ * inside it right-to-left.
  */
 fun markdownToJson(markdown: String): String =
     TEXT_EDITOR_JSON.encodeToString(TextEditorDocument.serializer(), MarkdownParser().parse(markdown))
@@ -67,6 +75,13 @@ internal class MarkdownParser {
                 isTable(lines, i) -> i = parseTable(lines, i, blocks)
 
                 CODE_FENCE.matches(line) -> i = parseCodeFence(lines, i, blocks)
+
+                DIR_DIV_OPEN.matches(line) -> i = parseDirectionBlock(lines, i, blocks)
+
+                HTML_BLOCK_LINE.matches(line) -> {
+                    blocks += htmlBlock(line)
+                    i++
+                }
 
                 HEADING.matches(line) -> {
                     val (hashes, rest) = HEADING.find(line)!!.destructured
@@ -97,7 +112,8 @@ internal class MarkdownParser {
         while (i < lines.size) {
             val line = lines[i]
             if (line.isBlank() || HEADING.matches(line) || isQuote(line) ||
-                listMarker(line, indent = 0) != null || isTable(lines, i) || CODE_FENCE.matches(line)
+                listMarker(line, indent = 0) != null || isTable(lines, i) || CODE_FENCE.matches(line) ||
+                DIR_DIV_OPEN.matches(line) || HTML_BLOCK_LINE.matches(line)
             ) break
             run += line.trim()
             i++
@@ -187,7 +203,9 @@ internal class MarkdownParser {
                     else -> break
                 }
             }
-            val children = mutableListOf<BaseParagraph>(Paragraph(content = inline(row.lead)))
+            // An item whose lead paragraph carries dir/alignment is exported as `- <p …>…</p>`.
+            val lead = if (HTML_BLOCK_LINE.matches(row.lead)) htmlBlock(row.lead) else Paragraph(content = inline(row.lead))
+            val children = mutableListOf<BaseParagraph>(lead)
             children += parseBlocks(continuation)
 
             if (kind != null && kind != row.kind) flush()
@@ -200,6 +218,83 @@ internal class MarkdownParser {
         }
         flush()
         return i
+    }
+
+    // ── Block-level HTML (direction / alignment) ─────────────────────────────
+
+    /**
+     * A one-line `<p …>…</p>` or `<hN …>…</hN>` — the exporter's fallback for a paragraph/heading with
+     * a `dir` or `text-align` Markdown cannot express — back to the node with those attrs.
+     */
+    private fun htmlBlock(line: String): BaseParagraph {
+        val (tag, rawAttributes, body) = HTML_BLOCK_LINE.find(line.trim())!!.destructured
+        val attributes = HTML_ATTRIBUTE.findAll(rawAttributes)
+            .associate { it.groupValues[1].lowercase() to it.groupValues[2] }
+        val dir = directionOf(attributes["dir"])
+        val align = alignOf(attributes["style"])
+        val content = inline(body)
+        val name = tag.lowercase()
+        return if (name == "p") {
+            Paragraph(attrs = ParagraphAttrs(textAlign = align, dir = dir), content = content)
+        } else {
+            val level = name.drop(1).toInt().coerceIn(HeadingLevels.H1, HeadingLevels.H6)
+            Heading(attrs = HeadingAttrs(level = level, textAlign = align, dir = dir), content = content)
+        }
+    }
+
+    /**
+     * A `<div dir="…">` HTML block (the exporter wraps an RTL list/blockquote in one, since their
+     * Markdown syntax takes no attributes) up to its matching `</div>` line. The content re-enters the
+     * block parser and every resulting block takes the div's direction. Unterminated, it runs to the
+     * end of the input.
+     */
+    private fun parseDirectionBlock(lines: List<String>, start: Int, blocks: MutableList<BaseParagraph>): Int {
+        val dir = directionOf(DIR_DIV_OPEN.find(lines[start])!!.groupValues[1])
+        var i = start + 1
+        var depth = 1
+        val inner = mutableListOf<String>()
+        while (i < lines.size) {
+            val line = lines[i]
+            if (DIV_CLOSE.matches(line)) depth--
+            else if (DIV_OPEN.matches(line)) depth++
+            i++
+            if (depth == 0) break
+            inner += line
+        }
+        blocks += parseBlocks(inner).map { it.withDirection(dir) }
+        return i
+    }
+
+    /** This block with writing direction [dir]; a task list (no `dir` attr) passes it to its items' paragraphs. */
+    private fun BaseParagraph.withDirection(dir: TextDirection): BaseParagraph {
+        if (dir == TextDirection.Ltr) return this
+        return when (this) {
+            is Paragraph -> copy(attrs = attrs.copy(dir = dir))
+            is Heading -> copy(attrs = attrs.copy(dir = dir))
+            is BulletedList -> copy(attrs = attrs.copy(dir = dir))
+            is OrderedList -> copy(attrs = attrs.copy(dir = dir))
+            is Blockquote -> copy(attrs = attrs.copy(dir = dir))
+            is TaskList -> copy(content = content.map { item ->
+                if (item is TaskListItem) item.copy(content = item.content.map { it.withDirection(dir) }) else item
+            })
+            else -> this
+        }
+    }
+
+    private fun directionOf(value: String?): TextDirection =
+        if (value?.trim()?.lowercase() == "rtl") TextDirection.Rtl else TextDirection.Ltr
+
+    /** The `text-align` declaration of an inline `style`, or [TextAlign.Left] when absent/unknown. */
+    private fun alignOf(style: String?): TextAlign {
+        val value = style.orEmpty().split(';')
+            .firstOrNull { it.substringBefore(':').trim().lowercase() == ExportHtml.TEXT_ALIGN }
+            ?.substringAfter(':')?.trim()?.lowercase()
+        return when (value) {
+            "center" -> TextAlign.Center
+            "right" -> TextAlign.Right
+            "justify" -> TextAlign.Justify
+            else -> TextAlign.Left
+        }
     }
 
     // ── Tables ───────────────────────────────────────────────────────────────
@@ -569,6 +664,15 @@ internal class MarkdownParser {
         val DELIMITER_ROW = Regex("""^\s*\|?[\s:\-|]*-[\s:\-|]*\|?\s*$""")
         // CommonMark allows up to three leading spaces before a fence.
         val CODE_FENCE = Regex("""^ {0,3}(```+)(.*)$""")
+
+        /** A one-line `<p …>…</p>` / `<hN …>…</hN>` block: tag, attributes, inner text. */
+        val HTML_BLOCK_LINE = Regex("""^\s*<(p|h[1-6])((?:\s+[a-zA-Z-]+="[^"]*")*)\s*>(.*)</\1>\s*$""", RegexOption.IGNORE_CASE)
+        val HTML_ATTRIBUTE = Regex("""([a-zA-Z-]+)="([^"]*)"""")
+        /** The exporter's direction wrapper: `<div dir="rtl">` alone on its line. */
+        val DIR_DIV_OPEN = Regex("""^\s*<div\s+dir="([a-zA-Z]+)"\s*>\s*$""", RegexOption.IGNORE_CASE)
+        /** Any other opening `<div …>` alone on its line — only tracked for nesting. */
+        val DIV_OPEN = Regex("""^\s*<div\b[^>]*>\s*$""", RegexOption.IGNORE_CASE)
+        val DIV_CLOSE = Regex("""^\s*</div>\s*$""", RegexOption.IGNORE_CASE)
 
         /** One nesting level of the exporter's indented item content. */
         const val NESTED_INDENT = 4

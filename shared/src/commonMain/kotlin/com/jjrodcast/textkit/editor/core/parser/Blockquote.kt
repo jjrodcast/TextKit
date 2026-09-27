@@ -5,7 +5,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 @SerialName(BlockquoteType.Blockquote)
-internal data class Blockquote(val content: List<BaseParagraph> = emptyList()) : BaseParagraph() {
+internal data class Blockquote(
+    val content: List<BaseParagraph> = emptyList(),
+    val attrs: BlockquoteAttrs = BlockquoteAttrs()
+) : BaseParagraph() {
     override val type: String = BlockquoteType.Blockquote
 }
 

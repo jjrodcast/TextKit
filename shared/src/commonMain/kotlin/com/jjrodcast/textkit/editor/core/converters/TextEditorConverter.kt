@@ -25,6 +25,7 @@ import com.jjrodcast.textkit.editor.core.parser.ParagraphNone
 import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TokenAttrs
@@ -106,10 +107,16 @@ internal object TextEditorConverter {
         return paragraphs
     }
 
+    /**
+     * @param inheritedDir the writing direction of the container this block sits in (a list or
+     * blockquote carries `dir` on the container node); combined with the block's own `dir` via
+     * [TextDirection.resolve] and stamped on the block's pieces.
+     */
     private fun BaseParagraph.getParagraphContentWithMarkers(
         decorator: TextDecoratorModel? = null,
         configuration: TextKitConfiguration,
-        embedLabel: String? = null
+        embedLabel: String? = null,
+        inheritedDir: TextDirection = TextDirection.Ltr
     ): List<TextEditorModel> {
         val items = arrayListOf<TextEditorModel>()
         when (this) {
@@ -159,6 +166,7 @@ internal object TextEditorConverter {
                 // paragraph converts back — the decorator is then the only piece left to carry the
                 // alignment across a reload.
                 items.applyTextAlign(attrs.textAlign)
+                items.applyTextDirection(TextDirection.resolve(attrs.dir, inheritedDir))
             }
 
             is Heading -> {
@@ -177,10 +185,12 @@ internal object TextEditorConverter {
                 items.postProcessParagraph(decorator)
                 // Same ordering as the Paragraph branch: stamp after the decorator is prepended.
                 items.applyTextAlign(attrs.textAlign)
+                items.applyTextDirection(TextDirection.resolve(attrs.dir, inheritedDir))
             }
 
             is OrderedList -> {
                 var localOrder = attrs.start
+                val listDir = TextDirection.resolve(attrs.dir, inheritedDir)
                 this.content.fastForEach { text ->
                     items.addAll(
                         text.getTextContentWithMarkers(
@@ -188,7 +198,8 @@ internal object TextEditorConverter {
                                 count = localOrder,
                                 level = decorator?.level ?: 0
                             ),
-                            configuration
+                            configuration,
+                            inheritedDir = listDir
                         )
                     )
                     localOrder++
@@ -196,13 +207,15 @@ internal object TextEditorConverter {
             }
 
             is BulletedList -> {
+                val listDir = TextDirection.resolve(attrs.dir, inheritedDir)
                 this.content.fastForEach { text ->
                     items.addAll(
                         text.getTextContentWithMarkers(
                             TextDecoratorModel.BulletDecoratorModel(
                                 level = decorator?.level ?: 0
                             ),
-                            configuration
+                            configuration,
+                            inheritedDir = listDir
                         )
                     )
                 }
@@ -218,7 +231,9 @@ internal object TextEditorConverter {
                                 level = decorator?.level ?: 0,
                                 nestedCount = taskItems.size
                             ),
-                            configuration
+                            configuration,
+                            // A task list has no `dir` of its own; it follows its container's.
+                            inheritedDir = inheritedDir
                         )
                     )
                 }
@@ -226,13 +241,15 @@ internal object TextEditorConverter {
 
             is Blockquote -> {
                 var group = 1
+                val quoteDir = TextDirection.resolve(attrs.dir, inheritedDir)
                 this.content.fastForEach { paragraph ->
                     items.addAll(
                         paragraph.getParagraphContentWithMarkers(
                             TextDecoratorModel.BlockquoteDecorator(
                                 group
                             ),
-                            configuration
+                            configuration,
+                            inheritedDir = quoteDir
                         )
                     )
                 }
@@ -254,6 +271,19 @@ internal object TextEditorConverter {
         for (i in indices) {
             val model = this[i]
             this[i] = model.copy(piece = model.piece.copy(textAlign = textAlign))
+        }
+    }
+
+    /**
+     * Stamps the paragraph-level [textDirection] onto every piece produced for a paragraph/heading,
+     * like [applyTextAlign] (including a prepended list decorator piece, so an empty RTL list item
+     * keeps its direction). No-op for the default [TextDirection.Ltr].
+     */
+    private fun ArrayList<TextEditorModel>.applyTextDirection(textDirection: TextDirection) {
+        if (textDirection == TextDirection.Ltr) return
+        for (i in indices) {
+            val model = this[i]
+            this[i] = model.copy(piece = model.piece.copy(textDirection = textDirection))
         }
     }
 
@@ -298,6 +328,7 @@ internal object TextEditorConverter {
         decorator: TextDecoratorModel? = null,
         configuration: TextKitConfiguration,
         headingLevel: Int? = null,
+        inheritedDir: TextDirection = TextDirection.Ltr,
     ): List<TextEditorModel> {
         val items = arrayListOf<TextEditorModel>()
         when (this) {
@@ -341,7 +372,8 @@ internal object TextEditorConverter {
                     items.addAll(
                         item.getParagraphContentWithMarkers(
                             decorator?.copyValue(decorator.level + 1),
-                            configuration
+                            configuration,
+                            inheritedDir = inheritedDir
                         )
                     )
                 }
@@ -354,7 +386,9 @@ internal object TextEditorConverter {
                             decorator.level + 1,
                             nestedCount = content.size
                         ) else null
-                    items.addAll(item.getParagraphContentWithMarkers(itemDecorator, configuration))
+                    items.addAll(
+                        item.getParagraphContentWithMarkers(itemDecorator, configuration, inheritedDir = inheritedDir)
+                    )
                 }
             }
         }

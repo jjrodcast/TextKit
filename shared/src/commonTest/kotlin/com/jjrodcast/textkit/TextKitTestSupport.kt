@@ -8,6 +8,7 @@ import com.jjrodcast.textkit.editor.core.parser.LinkAttrs
 import com.jjrodcast.textkit.editor.core.parser.LinkMark
 import com.jjrodcast.textkit.editor.core.parser.Mark
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorAction
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorSelectedMark
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorTransactionType
@@ -107,6 +108,17 @@ internal fun TextKitEditorManager.setTextAlign(
     prevSelectedMark = TextEditorSelectedMark.NONE,
     currSelectedMark = TextEditorSelectedMark.NONE,
     transactionType = TextEditorTransactionType.Alignment(textAlign)
+)
+
+/** Set the writing direction (LTR / RTL) of the paragraph(s) — or list/blockquote — at [range]. */
+internal fun TextKitEditorManager.setTextDirection(
+    range: TextRange,
+    textDirection: TextDirection
+): Pair<Boolean, TextRange> = updateDocument(
+    selection = range,
+    prevSelectedMark = TextEditorSelectedMark.NONE,
+    currSelectedMark = TextEditorSelectedMark.NONE,
+    transactionType = TextEditorTransactionType.Direction(textDirection)
 )
 
 /** Set (or clear, with `null`) the text color over [range]. */

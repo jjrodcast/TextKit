@@ -30,6 +30,7 @@ import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
@@ -65,20 +66,33 @@ internal class HtmlSerializer : DocumentSerializer {
     // ── Blocks ───────────────────────────────────────────────────────────────
 
     private fun block(paragraph: BaseParagraph): String = when (paragraph) {
-        is Paragraph -> tag(Tag.Paragraph, inline(paragraph.content), alignment(paragraph.attrs.textAlign))
+        is Paragraph -> tag(
+            Tag.Paragraph,
+            inline(paragraph.content),
+            direction(paragraph.attrs.dir) + alignment(paragraph.attrs.textAlign)
+        )
 
         is Heading -> {
             val level = paragraph.attrs.level.coerceIn(HeadingLevels.H1, HeadingLevels.H6)
-            tag("${Tag.Heading}$level", inline(paragraph.content), alignment(paragraph.attrs.textAlign))
+            tag(
+                "${Tag.Heading}$level",
+                inline(paragraph.content),
+                direction(paragraph.attrs.dir) + alignment(paragraph.attrs.textAlign)
+            )
         }
 
-        is BulletedList -> tag(Tag.UnorderedList, paragraph.content.joinToString(separator = "") { listItem(it) })
+        is BulletedList -> tag(
+            Tag.UnorderedList,
+            paragraph.content.joinToString(separator = "") { listItem(it) },
+            direction(paragraph.attrs.dir)
+        )
 
         is OrderedList -> {
             // A list start must be a positive integer; clamp bad input. `start` is only worth
             // emitting when the list does not begin at 1.
             val start = paragraph.attrs.start.coerceAtLeast(MIN_LIST_START)
-            val attributes = if (start != DEFAULT_LIST_START) attr(Attr.Start, start.toString()) else ""
+            val attributes = direction(paragraph.attrs.dir) +
+                if (start != DEFAULT_LIST_START) attr(Attr.Start, start.toString()) else ""
             tag(Tag.OrderedList, paragraph.content.joinToString(separator = "") { listItem(it) }, attributes)
         }
 
@@ -88,7 +102,11 @@ internal class HtmlSerializer : DocumentSerializer {
             attributes = attr(Attr.DataType, TASK_LIST_TYPE),
         )
 
-        is Blockquote -> tag(Tag.Blockquote, paragraph.content.joinToString(separator = "") { block(it) })
+        is Blockquote -> tag(
+            Tag.Blockquote,
+            paragraph.content.joinToString(separator = "") { block(it) },
+            direction(paragraph.attrs.dir)
+        )
 
         is EmbedBlock -> embed(paragraph)
 
@@ -260,6 +278,13 @@ internal class HtmlSerializer : DocumentSerializer {
     private fun alignment(align: TextAlign): String =
         ExportHtml.textAlignCss(align)?.let { attr(Attr.Style, it) } ?: ""
 
+    /**
+     * A `dir="rtl"` attribute for a right-to-left block, or `""` for the default LTR (never emitted,
+     * so an LTR block stays bare — same policy as [alignment]).
+     */
+    private fun direction(dir: TextDirection): String =
+        if (dir == TextDirection.Rtl) attr(Attr.Dir, DIR_RTL) else ""
+
     /** HTML element names. */
     private object Tag {
         const val Paragraph = "p"
@@ -288,6 +313,7 @@ internal class HtmlSerializer : DocumentSerializer {
     /** HTML attribute names. */
     private object Attr {
         const val Start = "start"
+        const val Dir = "dir"
         const val DataType = "data-type"
         const val DataId = "data-id"
         const val DataChecked = "data-checked"
@@ -309,5 +335,6 @@ internal class HtmlSerializer : DocumentSerializer {
         const val TABLE_HEADER_TYPE = "tableHeader"
         const val CHECKBOX_INPUT_TYPE = "checkbox"
         const val DEFAULT_SPAN = 1
+        const val DIR_RTL = "rtl"
     }
 }

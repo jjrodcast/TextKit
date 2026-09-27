@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
+import androidx.compose.material.icons.automirrored.rounded.FormatTextdirectionLToR
+import androidx.compose.material.icons.automirrored.rounded.FormatTextdirectionRToL
 import androidx.compose.material.icons.rounded.AlignHorizontalCenter
 import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material3.Card
@@ -20,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.theme.TextKitTheme
 import com.jjrodcast.textkit.ui.state.TextKitState
 import com.jjrodcast.textkit.ui.utils.TextKitPopupAnchorProvider
@@ -28,7 +31,9 @@ import textkit.shared.generated.resources.Res
 import textkit.shared.generated.resources.center_align_text
 import textkit.shared.generated.resources.justify_align_text
 import textkit.shared.generated.resources.left_align_text
+import textkit.shared.generated.resources.ltr_direction_text
 import textkit.shared.generated.resources.right_align_text
+import textkit.shared.generated.resources.rtl_direction_text
 
 @Composable
 fun TextKitAlignPopup(
@@ -37,6 +42,10 @@ fun TextKitAlignPopup(
     selectedColor: Color = TextKitTheme.colors.primary.copy(alpha = 0.45f),
     onTextAlignmentSelected: (TextAlign) -> Unit = { textAlign ->
         state.applyTextAlignment(textAlign)
+        state.dismissAlignPicker()
+    },
+    onTextDirectionSelected: (TextDirection) -> Unit = { textDirection ->
+        state.applyTextDirection(textDirection)
         state.dismissAlignPicker()
     },
     onClose: () -> Unit = { state.dismissAlignPicker() }
@@ -89,6 +98,22 @@ fun TextKitAlignPopup(
                     painter = rememberVectorPainter(Icons.Rounded.FormatAlignJustify),
                     value = state.currentTextAlign == TextAlign.Justify,
                     onClick = { onTextAlignmentSelected(TextAlign.Justify) },
+                    backgroundColor = selectedColor
+                )
+                TextKitFormattingSeparator()
+                TextKitTooltipFormattingItem(
+                    tooltipText = stringResource(Res.string.ltr_direction_text),
+                    painter = rememberVectorPainter(Icons.AutoMirrored.Rounded.FormatTextdirectionLToR),
+                    value = state.currentTextDirection == TextDirection.Ltr,
+                    onClick = { onTextDirectionSelected(TextDirection.Ltr) },
+                    backgroundColor = selectedColor
+                )
+                TextKitFormattingSeparator()
+                TextKitTooltipFormattingItem(
+                    tooltipText = stringResource(Res.string.rtl_direction_text),
+                    painter = rememberVectorPainter(Icons.AutoMirrored.Rounded.FormatTextdirectionRToL),
+                    value = state.currentTextDirection == TextDirection.Rtl,
+                    onClick = { onTextDirectionSelected(TextDirection.Rtl) },
                     backgroundColor = selectedColor
                 )
             }

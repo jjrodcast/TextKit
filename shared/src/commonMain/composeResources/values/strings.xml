@@ -27,6 +27,8 @@
     <string name="center_align_text">Center align</string>
     <string name="right_align_text">Right align</string>
     <string name="justify_align_text">Justify align</string>
+    <string name="ltr_direction_text">Left to right</string>
+    <string name="rtl_direction_text">Right to left</string>
 
     <string name="table_merge_cells_text">Merge cells</string>
     <string name="table_split_cell_text">Split cell</string>

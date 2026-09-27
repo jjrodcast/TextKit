@@ -143,6 +143,8 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
      *   selection's marks and pass [TextEditorTransactionType.Link].
      * - **Colors:** pass [TextEditorTransactionType.Color]; [prevSelectedMark] / [currSelectedMark]
      *   are ignored and the color marks are resolved from the current selection by [updateColor].
+     * - **Writing direction:** pass [TextEditorTransactionType.Direction] (LTR / RTL); applies to whole
+     *   paragraphs, or to the whole list/blockquote the selection is in.
      *
      * @return whether the edit was applied, plus the resulting range.
      */
@@ -156,6 +158,8 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
         is TextEditorTransactionType.Alignment -> {
             updateTextAlignment(selection, transactionType.textAlign)
         }
+
+        is TextEditorTransactionType.Direction -> updateTextDirection(selection, transactionType)
 
         else -> transaction.updateDocument(
             prevMarks = prevSelectedMark.marks,
@@ -186,6 +190,25 @@ class TextKitEditorManager(val configuration: TextKitConfiguration = createTextK
         currListItem = TextEditorSelectedMark.NONE.listItemSelected,
         range = selection,
         transactionType = TextEditorTransactionType.Alignment(textAlign)
+    )
+
+    /**
+     * Sets the writing direction ([TextEditorTransactionType.Direction]) over every paragraph the
+     * [selection] touches — the whole list/blockquote when it is inside one. Marks and list items are
+     * irrelevant, exactly like [updateTextAlignment].
+     *
+     * @return whether the document changed, plus the resulting selection (unchanged).
+     */
+    private fun updateTextDirection(
+        selection: TextRange,
+        transactionType: TextEditorTransactionType.Direction
+    ): Pair<Boolean, TextRange> = transaction.updateDocument(
+        prevMarks = emptySet(),
+        currMarks = emptySet(),
+        prevListItem = TextEditorSelectedMark.NONE.listItemSelected,
+        currListItem = TextEditorSelectedMark.NONE.listItemSelected,
+        range = selection,
+        transactionType = transactionType
     )
 
     private fun updateColor(

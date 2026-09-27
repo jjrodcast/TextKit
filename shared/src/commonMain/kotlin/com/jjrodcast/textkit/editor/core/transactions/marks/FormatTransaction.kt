@@ -79,8 +79,9 @@ internal object FormatTransaction {
         return when (transactionType) {
             TextEditorTransactionType.Format -> this
             is TextEditorTransactionType.Color -> this
-            // Alignment is handled upstream in TextEditorTransaction and never routed here.
+            // Alignment and direction are handled upstream in TextEditorTransaction and never routed here.
             is TextEditorTransactionType.Alignment -> this
+            is TextEditorTransactionType.Direction -> this
             is TextEditorTransactionType.Link -> {
                 if (item.piece.marks.any { it is LinkMark }) TextRange(
                     item.pieceStart,

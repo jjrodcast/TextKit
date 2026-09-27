@@ -30,6 +30,7 @@ import com.jjrodcast.textkit.editor.core.parser.TaskList
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
 import com.jjrodcast.textkit.editor.core.parser.UnderlineMark
@@ -66,58 +67,85 @@ internal class MarkdownSerializer : DocumentSerializer {
 
     // ── Blocks ───────────────────────────────────────────────────────────────
 
-    private fun block(paragraph: BaseParagraph): String = when (paragraph) {
+    /**
+     * @param inheritedDir the writing direction of the enclosing list/blockquote. A block that has
+     * the same direction as its container does not repeat it, so an RTL list emits one wrapper, not
+     * one `dir` per item paragraph.
+     */
+    private fun block(paragraph: BaseParagraph, inheritedDir: TextDirection = TextDirection.Ltr): String = when (paragraph) {
         is Paragraph -> {
             val body = inline(paragraph.content)
-            aligned(body, Html.Paragraph, paragraph.attrs.textAlign) ?: body
+            htmlBlock(body, Html.Paragraph, paragraph.attrs.textAlign, emitsDir(paragraph.attrs.dir, inheritedDir))
+                ?: body
         }
 
         is Heading -> {
             val level = paragraph.attrs.level.coerceIn(HeadingLevels.H1, HeadingLevels.H6)
             val body = inline(paragraph.content)
-            aligned(body, "${Html.Heading}$level", paragraph.attrs.textAlign)
+            htmlBlock(body, "${Html.Heading}$level", paragraph.attrs.textAlign, emitsDir(paragraph.attrs.dir, inheritedDir))
                 ?: "${Md.Heading.repeat(level)} $body"
         }
 
-        is BulletedList -> paragraph.content.joinToString(separator = "\n") { listRow(Md.Bullet, it) }
+        is BulletedList -> directional(paragraph.attrs.dir, inheritedDir) { dir ->
+            paragraph.content.joinToString(separator = "\n") { listRow(Md.Bullet, it, dir) }
+        }
 
-        is OrderedList -> {
+        is OrderedList -> directional(paragraph.attrs.dir, inheritedDir) { dir ->
             val start = paragraph.attrs.start.coerceAtLeast(MIN_LIST_START)
-            paragraph.content.mapIndexed { index, item -> listRow("${start + index}${Md.OrderedDot}", item) }
+            paragraph.content.mapIndexed { index, item -> listRow("${start + index}${Md.OrderedDot}", item, dir) }
                 .joinToString(separator = "\n")
         }
 
-        is TaskList -> paragraph.items.joinToString(separator = "\n") { taskRow(it) }
+        is TaskList -> paragraph.items.joinToString(separator = "\n") { taskRow(it, inheritedDir) }
 
-        is Blockquote -> blockquote(paragraph.content)
+        is Blockquote -> directional(paragraph.attrs.dir, inheritedDir) { dir -> blockquote(paragraph.content, dir) }
 
         is EmbedBlock -> embed(paragraph)
 
         is ParagraphNone -> ""
     }
 
+    /**
+     * Whether a block with direction [own] inside a container with direction [inherited] must state
+     * its `dir`: only an RTL block in a non-RTL context (LTR is the default and never emitted).
+     */
+    private fun emitsDir(own: TextDirection, inherited: TextDirection): Boolean =
+        own == TextDirection.Rtl && inherited != TextDirection.Rtl
+
+    /**
+     * Renders a container block (list, blockquote) whose Markdown syntax cannot carry attributes. An
+     * RTL container is wrapped in a `<div dir="rtl">` HTML block; the blank lines around the content
+     * make GFM keep parsing it as Markdown inside the div. [render] receives the direction its
+     * children inherit.
+     */
+    private fun directional(own: TextDirection, inherited: TextDirection, render: (TextDirection) -> String): String {
+        val body = render(TextDirection.resolve(own, inherited))
+        if (!emitsDir(own, inherited) || body.isEmpty()) return body
+        return "<${Html.Div}${htmlAttr(Html.Dir, DIR_RTL)}>$BLOCK_SEPARATOR$body$BLOCK_SEPARATOR</${Html.Div}>"
+    }
+
     /** Renders [blocks] and prefixes every line with `> `, so nested block content stays quoted. */
-    private fun blockquote(blocks: List<BaseParagraph>): String {
-        val inner = blocks.map { block(it) }.filter { it.isNotEmpty() }.joinToString(separator = BLOCK_SEPARATOR)
+    private fun blockquote(blocks: List<BaseParagraph>, dir: TextDirection): String {
+        val inner = blocks.map { block(it, dir) }.filter { it.isNotEmpty() }.joinToString(separator = BLOCK_SEPARATOR)
         return inner.split("\n").joinToString(separator = "\n") { if (it.isEmpty()) Md.QuoteBlank else "${Md.Quote}$it" }
     }
 
     // ── Lists ────────────────────────────────────────────────────────────────
 
     /** One `-`/`N.` row. Its item's lead paragraph rides the marker line; any further block nests. */
-    private fun listRow(marker: String, item: BaseText): String {
+    private fun listRow(marker: String, item: BaseText, dir: TextDirection): String {
         val blocks = when (item) {
             is ListItem -> item.content
             // A list whose child is not a list item is malformed; keep its text rather than drop it.
             else -> return "$marker ${inline(listOf(item))}"
         }
-        return "$marker ${itemBody(blocks)}"
+        return "$marker ${itemBody(blocks, dir)}"
     }
 
     /** One `- [ ]`/`- [x]` task row. */
-    private fun taskRow(item: TaskListItem): String {
+    private fun taskRow(item: TaskListItem, dir: TextDirection): String {
         val marker = if (item.attrs.checked) Md.TaskChecked else Md.TaskUnchecked
-        return "$marker ${itemBody(item.content)}"
+        return "$marker ${itemBody(item.content, dir)}"
     }
 
     /**
@@ -127,14 +155,14 @@ internal class MarkdownSerializer : DocumentSerializer {
      * by a blank line, which Markdown requires or it is merged into the lead paragraph. Indentation
      * compounds with depth because each level indents its own nested output.
      */
-    private fun itemBody(blocks: List<BaseParagraph>): String {
+    private fun itemBody(blocks: List<BaseParagraph>, dir: TextDirection): String {
         val first = blocks.firstOrNull()
         // block() (not inline()) so an aligned lead paragraph still emits its HTML wrapper.
-        val lead = (first as? Paragraph)?.let { block(it) } ?: ""
+        val lead = (first as? Paragraph)?.let { block(it, dir) } ?: ""
         val rest = if (first is Paragraph) blocks.drop(1) else blocks
         val builder = StringBuilder(lead)
         rest.forEach { child ->
-            val rendered = block(child)
+            val rendered = block(child, dir)
             if (rendered.isEmpty()) return@forEach
             builder.append(if (child.isList()) "\n" else BLOCK_SEPARATOR).append(indent(rendered))
         }
@@ -293,13 +321,19 @@ internal class MarkdownSerializer : DocumentSerializer {
     private fun htmlTag(name: String, body: String): String = "<$name>$body</$name>"
 
     /**
-     * Wraps [body] in an aligned inline-HTML block ([tag]) when [align] is non-default; returns `null`
-     * for the default [TextAlign.Left] so the caller keeps the plain Markdown form. GFM has no
-     * paragraph alignment, so this HTML passthrough is the only way to carry it — the same fallback
-     * strategy the marks use.
+     * Wraps [body] in an inline-HTML block ([tag]) carrying a non-default [align] and/or, when
+     * [emitDir], `dir="rtl"`; returns `null` when there is nothing to carry so the caller keeps the
+     * plain Markdown form. GFM has neither paragraph alignment nor direction, so this HTML passthrough
+     * is the only way to carry them — the same fallback strategy the marks use. Attribute order
+     * matches the HTML export (`dir` before `style`).
      */
-    private fun aligned(body: String, tag: String, align: TextAlign): String? =
-        ExportHtml.textAlignCss(align)?.let { "<$tag${htmlAttr(Html.Style, it)}>$body</$tag>" }
+    private fun htmlBlock(body: String, tag: String, align: TextAlign, emitDir: Boolean): String? {
+        val attributes = buildString {
+            if (emitDir) append(htmlAttr(Html.Dir, DIR_RTL))
+            ExportHtml.textAlignCss(align)?.let { append(htmlAttr(Html.Style, it)) }
+        }
+        return if (attributes.isEmpty()) null else "<$tag$attributes>$body</$tag>"
+    }
 
     /** One inline-HTML attribute, e.g. ` style="color:#fff"`, with the value attribute-escaped. */
     private fun htmlAttr(name: String, value: String): String = " $name=\"${ExportHtml.escapeAttribute(value)}\""
@@ -363,6 +397,7 @@ internal class MarkdownSerializer : DocumentSerializer {
         const val Div = "div"
         const val LineBreak = "br"
         const val Style = "style"
+        const val Dir = "dir"
         const val DataType = "data-type"
         const val DataId = "data-id"
     }
@@ -371,6 +406,7 @@ internal class MarkdownSerializer : DocumentSerializer {
         const val BLOCK_SEPARATOR = "\n\n"
         const val NESTED_INDENT = "    "
         const val MIN_LIST_START = 1
+        const val DIR_RTL = "rtl"
 
         /** Inline Markdown metacharacters backslash-escaped in text so they render literally. */
         val MARKDOWN_METACHARACTERS = setOf('`', '*', '_', '[', ']', '~', '|')

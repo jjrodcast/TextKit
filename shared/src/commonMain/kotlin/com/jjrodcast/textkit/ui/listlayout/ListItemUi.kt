@@ -1,5 +1,6 @@
 package com.jjrodcast.textkit.ui.listlayout
 
+import com.jjrodcast.textkit.editor.core.parser.TextDirection as TextKitTextDirection
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel
 import com.jjrodcast.textkit.editor.core.piecetable.models.TextDecoratorModel.Companion.createDecoratorString
 import com.jjrodcast.textkit.editor.core.transactions.models.TextEditorItem
@@ -11,8 +12,11 @@ import com.jjrodcast.textkit.editor.utils.DOT
 import com.jjrodcast.textkit.editor.utils.SPACE
 import com.jjrodcast.textkit.editor.utils.TASK_DECORATOR_INTERACTIVE
 import com.jjrodcast.textkit.editor.utils.TASK_DECORATOR_UNCHECKED_INTERACTIVE
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.em
 
 /** Matches [com.jjrodcast.textkit.ui.state.TextKitState.DefaultParagraphStyle] line metrics. */
@@ -41,7 +45,27 @@ internal data class EditorParagraphSegment(
     val gutter: TextDecoratorModel? = null,
     /** Whether this paragraph carries the blockquote attribute (#126) — drives the quote bar. */
     val quoted: Boolean = false,
+    /** Whether this paragraph is right-to-left — its marker / quote bar sit on the right edge. */
+    val rtl: Boolean = false,
 )
+
+/** Whether this paragraph's writing direction (`dir` attr) is right-to-left. */
+internal fun TextEditorParagraph.isRtl(): Boolean = textDirection == TextKitTextDirection.Rtl
+
+/**
+ * Applies a right-to-left writing direction to this paragraph style when [rtl]: the bidi base
+ * direction becomes RTL and the default [TextAlign.Left] turns into [TextAlign.Start] so the
+ * paragraph starts at the right edge (an explicit center/right/justify is kept). LTR paragraphs are
+ * returned untouched, keeping the content-based direction they always had.
+ */
+internal fun ParagraphStyle.withTextDirection(rtl: Boolean): ParagraphStyle =
+    if (!rtl) this else copy(textDirection = TextDirection.Rtl, textAlign = textAlign.followingDirection())
+
+/** [TextStyle] counterpart of [ParagraphStyle.withTextDirection]. */
+internal fun TextStyle.withTextDirection(rtl: Boolean): TextStyle =
+    if (!rtl) this else copy(textDirection = TextDirection.Rtl, textAlign = textAlign.followingDirection())
+
+private fun TextAlign.followingDirection(): TextAlign = if (this == TextAlign.Left) TextAlign.Start else this
 
 /** Whether this paragraph carries the blockquote attribute (#126). */
 internal fun TextEditorParagraph.isQuoted(): Boolean =
@@ -96,6 +120,7 @@ internal fun buildEditorSegments(
             keptSpace = keptSpace,
             gutter = if (gutterLength > 0) paragraph.listDecoratorChild()?.decorator else null,
             quoted = paragraph.isQuoted(),
+            rtl = paragraph.isRtl(),
         )
         displayCursor += displayLength
     }

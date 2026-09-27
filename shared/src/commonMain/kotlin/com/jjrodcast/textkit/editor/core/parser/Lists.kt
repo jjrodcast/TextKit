@@ -41,7 +41,10 @@ internal data class ListItem(val content: List<BaseParagraph> = emptyList()) : B
 
 @Serializable
 @SerialName(ListTypes.BulletList)
-internal data class BulletedList(val content: List<BaseText> = emptyList()) : BaseParagraph() {
+internal data class BulletedList(
+    val content: List<BaseText> = emptyList(),
+    val attrs: BulletListAttrs = BulletListAttrs()
+) : BaseParagraph() {
     override val type: String = ListTypes.BulletList
 }
 

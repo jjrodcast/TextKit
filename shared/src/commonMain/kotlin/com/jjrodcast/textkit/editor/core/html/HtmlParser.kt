@@ -4,7 +4,9 @@ import com.jjrodcast.textkit.editor.core.export.ExportHtml
 import com.jjrodcast.textkit.editor.core.parser.BaseParagraph
 import com.jjrodcast.textkit.editor.core.parser.BaseText
 import com.jjrodcast.textkit.editor.core.parser.Blockquote
+import com.jjrodcast.textkit.editor.core.parser.BlockquoteAttrs
 import com.jjrodcast.textkit.editor.core.parser.BoldMark
+import com.jjrodcast.textkit.editor.core.parser.BulletListAttrs
 import com.jjrodcast.textkit.editor.core.parser.BulletedList
 import com.jjrodcast.textkit.editor.core.parser.EmbedBlock
 import com.jjrodcast.textkit.editor.core.parser.EmbedTypes
@@ -33,6 +35,7 @@ import com.jjrodcast.textkit.editor.core.parser.TaskListAttrs
 import com.jjrodcast.textkit.editor.core.parser.TaskListItem
 import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextAlign
+import com.jjrodcast.textkit.editor.core.parser.TextDirection
 import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import com.jjrodcast.textkit.editor.core.parser.TextStyleAttrs
 import com.jjrodcast.textkit.editor.core.parser.TextStyleMark
@@ -341,22 +344,34 @@ internal class HtmlParser {
     }
 
     private fun mapBlock(element: Element, marks: Set<Mark> = emptySet()): List<BaseParagraph> = when (element.name) {
-        "p" -> listOf(Paragraph(attrs = ParagraphAttrs(textAlign = alignOf(element)), content = mapInline(element.children, marks)))
+        "p" -> listOf(
+            Paragraph(
+                attrs = ParagraphAttrs(textAlign = alignOf(element), dir = dirOf(element)),
+                content = mapInline(element.children, marks)
+            )
+        )
 
         "h1", "h2", "h3", "h4", "h5", "h6" -> {
             val level = element.name.drop(1).toInt().coerceIn(HeadingLevels.H1, HeadingLevels.H6)
-            listOf(Heading(attrs = HeadingAttrs(level = level, textAlign = alignOf(element)), content = mapInline(element.children, marks)))
+            listOf(
+                Heading(
+                    attrs = HeadingAttrs(level = level, textAlign = alignOf(element), dir = dirOf(element)),
+                    content = mapInline(element.children, marks)
+                )
+            )
         }
 
-        "blockquote" -> listOf(Blockquote(content = mapBlocks(element.children, marks)))
+        "blockquote" -> listOf(
+            Blockquote(content = mapBlocks(element.children, marks), attrs = BlockquoteAttrs(dir = dirOf(element)))
+        )
 
         "ul" ->
             if (element.attrs[DATA_TYPE] == TASK_LIST_TYPE) listOf(taskList(element, marks))
-            else listOf(BulletedList(content = listItems(element, marks)))
+            else listOf(BulletedList(content = listItems(element, marks), attrs = BulletListAttrs(dir = dirOf(element))))
 
         "ol" -> {
             val start = element.attrs["start"]?.toIntOrNull()?.coerceAtLeast(1) ?: 1
-            listOf(OrderedList(attrs = ListAttrs(start = start), content = listItems(element, marks)))
+            listOf(OrderedList(attrs = ListAttrs(start = start, dir = dirOf(element)), content = listItems(element, marks)))
         }
 
         "table" -> listOf(tableEmbed(element, marks))
@@ -648,6 +663,10 @@ internal class HtmlParser {
             else -> TextAlign.Left
         }
     }
+
+    /** The block's writing direction from the HTML `dir` attribute; anything but `rtl` is LTR. */
+    private fun dirOf(element: Element): TextDirection =
+        if (element.attrs["dir"]?.trim()?.lowercase() == "rtl") TextDirection.Rtl else TextDirection.Ltr
 
     /** HTML collapses whitespace runs to one space outside `pre`. */
     private fun collapseWhitespace(text: String): String =
