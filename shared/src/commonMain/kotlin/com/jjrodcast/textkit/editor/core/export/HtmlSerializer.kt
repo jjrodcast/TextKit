@@ -65,7 +65,11 @@ internal class HtmlSerializer : DocumentSerializer {
 
     // ── Blocks ───────────────────────────────────────────────────────────────
 
-    private fun block(paragraph: BaseParagraph): String = when (paragraph) {
+    /**
+     * @param inheritedDir the direction of the enclosing list, used only to decide whether a nested
+     * list must state an explicit `dir="ltr"` (see [listDirection]).
+     */
+    private fun block(paragraph: BaseParagraph, inheritedDir: TextDirection = TextDirection.Ltr): String = when (paragraph) {
         is Paragraph -> tag(
             Tag.Paragraph,
             inline(paragraph.content),
@@ -83,28 +87,28 @@ internal class HtmlSerializer : DocumentSerializer {
 
         is BulletedList -> tag(
             Tag.UnorderedList,
-            paragraph.content.joinToString(separator = "") { listItem(it) },
-            direction(paragraph.attrs.dir)
+            paragraph.content.joinToString(separator = "") { listItem(it, paragraph.attrs.dir) },
+            listDirection(paragraph.attrs.dir, inheritedDir)
         )
 
         is OrderedList -> {
             // A list start must be a positive integer; clamp bad input. `start` is only worth
             // emitting when the list does not begin at 1.
             val start = paragraph.attrs.start.coerceAtLeast(MIN_LIST_START)
-            val attributes = direction(paragraph.attrs.dir) +
+            val attributes = listDirection(paragraph.attrs.dir, inheritedDir) +
                 if (start != DEFAULT_LIST_START) attr(Attr.Start, start.toString()) else ""
-            tag(Tag.OrderedList, paragraph.content.joinToString(separator = "") { listItem(it) }, attributes)
+            tag(Tag.OrderedList, paragraph.content.joinToString(separator = "") { listItem(it, paragraph.attrs.dir) }, attributes)
         }
 
         is TaskList -> tag(
             name = Tag.UnorderedList,
-            body = paragraph.items.joinToString(separator = "") { taskItem(it) },
+            body = paragraph.items.joinToString(separator = "") { taskItem(it, inheritedDir) },
             attributes = attr(Attr.DataType, TASK_LIST_TYPE),
         )
 
         is Blockquote -> tag(
             Tag.Blockquote,
-            paragraph.content.joinToString(separator = "") { block(it) },
+            paragraph.content.joinToString(separator = "") { block(it, paragraph.attrs.dir) },
             direction(paragraph.attrs.dir)
         )
 
@@ -179,8 +183,8 @@ internal class HtmlSerializer : DocumentSerializer {
     }
 
     /** A `<li>` of an ordered or bulleted list. Only [ListItem] carries block content. */
-    private fun listItem(item: BaseText): String = when (item) {
-        is ListItem -> tag(Tag.ListItem, item.content.joinToString(separator = "") { block(it) })
+    private fun listItem(item: BaseText, listDir: TextDirection): String = when (item) {
+        is ListItem -> tag(Tag.ListItem, item.content.joinToString(separator = "") { block(it, listDir) })
         // A list whose children are not list items is malformed; render the inline content directly
         // rather than dropping it.
         else -> tag(Tag.ListItem, inline(listOf(item)))
@@ -190,12 +194,12 @@ internal class HtmlSerializer : DocumentSerializer {
      * A task `<li>`. The checkbox is a real, enabled `<input>` so the exported HTML stays
      * interactive; `data-checked` mirrors the state for consumers that re-import the markup.
      */
-    private fun taskItem(item: TaskListItem): String {
+    private fun taskItem(item: TaskListItem, listDir: TextDirection): String {
         val checked = item.attrs.checked
         val input = "<${Tag.Checkbox}${attr(Attr.Type, CHECKBOX_INPUT_TYPE)}${if (checked) " ${Attr.Checked}" else ""}>"
         return tag(
             name = Tag.ListItem,
-            body = input + item.content.joinToString(separator = "") { block(it) },
+            body = input + item.content.joinToString(separator = "") { block(it, listDir) },
             attributes = attr(Attr.DataType, TASK_ITEM_TYPE) + attr(Attr.DataChecked, checked.toString()),
         )
     }
@@ -285,6 +289,18 @@ internal class HtmlSerializer : DocumentSerializer {
     private fun direction(dir: TextDirection): String =
         if (dir == TextDirection.Rtl) attr(Attr.Dir, DIR_RTL) else ""
 
+    /**
+     * The `dir` attribute of a list. A list is its own `dir` node, but HTML inherits `dir` from the
+     * enclosing element, so an LTR list nested in an RTL one states `dir="ltr"` explicitly — otherwise
+     * a browser would render it right-to-left. An RTL list always states `dir="rtl"`, which is also
+     * what the importer reads back.
+     */
+    private fun listDirection(dir: TextDirection, inheritedDir: TextDirection): String = when {
+        dir == TextDirection.Rtl -> attr(Attr.Dir, DIR_RTL)
+        inheritedDir == TextDirection.Rtl -> attr(Attr.Dir, DIR_LTR)
+        else -> ""
+    }
+
     /** HTML element names. */
     private object Tag {
         const val Paragraph = "p"
@@ -336,5 +352,6 @@ internal class HtmlSerializer : DocumentSerializer {
         const val CHECKBOX_INPUT_TYPE = "checkbox"
         const val DEFAULT_SPAN = 1
         const val DIR_RTL = "rtl"
+        const val DIR_LTR = "ltr"
     }
 }

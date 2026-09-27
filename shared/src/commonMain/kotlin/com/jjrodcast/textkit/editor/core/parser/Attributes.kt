@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 data class LinkAttrs(val href: String, val target: String = "")
 
 @Serializable
-data class TaskListAttrs(val checked: Boolean = false, val dir: TextDirection = TextDirection.Ltr)
+data class TaskListAttrs(val checked: Boolean = false)
 
 @Serializable
 data class ListAttrs(val start: Int = 1, val dir: TextDirection = TextDirection.Ltr)

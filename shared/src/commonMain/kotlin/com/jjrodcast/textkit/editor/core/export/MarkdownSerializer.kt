@@ -86,11 +86,13 @@ internal class MarkdownSerializer : DocumentSerializer {
                 ?: "${Md.Heading.repeat(level)} $body"
         }
 
-        is BulletedList -> directional(paragraph.attrs.dir, inheritedDir) { dir ->
+        // A list is its own `dir` node (it never inherits a parent list's direction on load), so its
+        // direction is always stated against the default, not against the enclosing container.
+        is BulletedList -> directional(paragraph.attrs.dir, TextDirection.Ltr) { dir ->
             paragraph.content.joinToString(separator = "\n") { listRow(Md.Bullet, it, dir) }
         }
 
-        is OrderedList -> directional(paragraph.attrs.dir, inheritedDir) { dir ->
+        is OrderedList -> directional(paragraph.attrs.dir, TextDirection.Ltr) { dir ->
             val start = paragraph.attrs.start.coerceAtLeast(MIN_LIST_START)
             paragraph.content.mapIndexed { index, item -> listRow("${start + index}${Md.OrderedDot}", item, dir) }
                 .joinToString(separator = "\n")

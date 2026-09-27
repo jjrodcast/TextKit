@@ -667,7 +667,7 @@ internal class MarkdownParser {
 
         /** A one-line `<p …>…</p>` / `<hN …>…</hN>` block: tag, attributes, inner text. */
         val HTML_BLOCK_LINE = Regex("""^\s*<(p|h[1-6])((?:\s+[a-zA-Z-]+="[^"]*")*)\s*>(.*)</\1>\s*$""", RegexOption.IGNORE_CASE)
-        val HTML_ATTRIBUTE = Regex("""([a-zA-Z-]+)="([^"]*)"""")
+        val HTML_ATTRIBUTE = Regex("""([a-zA-Z-]+)="([^"]*)""")
         /** The exporter's direction wrapper: `<div dir="rtl">` alone on its line. */
         val DIR_DIV_OPEN = Regex("""^\s*<div\s+dir="([a-zA-Z]+)"\s*>\s*$""", RegexOption.IGNORE_CASE)
         /** Any other opening `<div …>` alone on its line — only tracked for nesting. */

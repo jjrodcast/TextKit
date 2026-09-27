@@ -109,8 +109,9 @@ internal object TextEditorConverter {
 
     /**
      * @param inheritedDir the writing direction of the container this block sits in (a list or
-     * blockquote carries `dir` on the container node); combined with the block's own `dir` via
-     * [TextDirection.resolve] and stamped on the block's pieces.
+     * blockquote carries `dir` on the container node). A paragraph/heading combines it with its own
+     * `dir` via [TextDirection.resolve]; a task list (no `dir` of its own) passes it on; a nested
+     * `bulletList`/`orderedList` ignores it — it is an independent `dir` node.
      */
     private fun BaseParagraph.getParagraphContentWithMarkers(
         decorator: TextDecoratorModel? = null,
@@ -190,7 +191,8 @@ internal object TextEditorConverter {
 
             is OrderedList -> {
                 var localOrder = attrs.start
-                val listDir = TextDirection.resolve(attrs.dir, inheritedDir)
+                // A list is its own `dir` node: it does not inherit its parent list's direction.
+                val listDir = attrs.dir
                 this.content.fastForEach { text ->
                     items.addAll(
                         text.getTextContentWithMarkers(
@@ -207,7 +209,8 @@ internal object TextEditorConverter {
             }
 
             is BulletedList -> {
-                val listDir = TextDirection.resolve(attrs.dir, inheritedDir)
+                // A list is its own `dir` node: it does not inherit its parent list's direction.
+                val listDir = attrs.dir
                 this.content.fastForEach { text ->
                     items.addAll(
                         text.getTextContentWithMarkers(

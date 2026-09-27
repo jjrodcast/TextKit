@@ -83,24 +83,109 @@ class TextDirectionTest {
         assertEquals(listOf("rtl", "rtl"), quote.children.map { it.dir })
     }
 
+    /** A bullet list whose first item holds a nested ordered list: flat order p1, c1, c2, p2. */
+    private fun nestedListDoc(parentDir: String = "ltr", nestedDir: String = "ltr") = """{"type":"doc","content":[
+        {"type":"bulletList","attrs":{"dir":"$parentDir"},"content":[
+          {"type":"listItem","content":[
+            {"type":"paragraph","content":[{"type":"text","text":"parent one"}]},
+            {"type":"orderedList","attrs":{"start":1,"dir":"$nestedDir"},"content":[
+              {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"child one"}]}]},
+              {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"child two"}]}]}
+            ]}
+          ]},
+          {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"parent two"}]}]}
+        ]},
+        {"type":"paragraph","content":[{"type":"text","text":"after"}]}
+    ]}"""
+
+    /** (parent list dir, nested list dir) read from an exported [nestedListDoc]. */
+    private fun nestedDirsOf(json: String): Pair<String?, String?> {
+        val list = blocksOf(json).first()
+        val nested = list.children.first().children.first { it.type == "orderedList" }
+        return list.dir to nested.dir
+    }
+
+    private val rtl = TextDirection.Rtl
+    private val ltr = TextDirection.Ltr
+
     @Test
-    fun nestedListInheritsRtlFromParentList() {
+    fun nestedListKeepsItsOwnDirectionOnLoad() {
+        // A nested list is an independent `dir` node: it does not inherit its parent list's RTL.
+        val editor = editorFrom(nestedListDoc(parentDir = "rtl", nestedDir = "ltr"))
+        assertEquals(listOf(rtl, ltr, ltr, rtl, ltr), editor.getParagraphs().map { it.textDirection })
+        assertEquals("rtl" to "ltr", nestedDirsOf(editor.toJson()))
+
+        val both = editorFrom(nestedListDoc(parentDir = "rtl", nestedDir = "rtl"))
+        assertEquals("rtl" to "rtl", nestedDirsOf(both.toJson()))
+    }
+
+    @Test
+    fun caretInNestedListOnlyFlipsTheNestedList() {
+        val editor = editorFrom(nestedListDoc())
+        editor.setTextDirection(TextRange(editor.offsetOf("child two") + 1), TextDirection.Rtl)
+
+        assertEquals(listOf(ltr, rtl, rtl, ltr, ltr), editor.getParagraphs().map { it.textDirection })
+        assertEquals("ltr" to "rtl", nestedDirsOf(editor.toJson()))
+        // Survives a reload: the parent is not pulled to RTL by its nested list.
+        assertEquals("ltr" to "rtl", nestedDirsOf(editorFrom(editor.toJson()).toJson()))
+    }
+
+    @Test
+    fun caretInParentListSkipsTheNestedList() {
+        val editor = editorFrom(nestedListDoc())
+        // Caret on the item AFTER the nested list: the walk back must skip the nested items.
+        editor.setTextDirection(TextRange(editor.offsetOf("parent two") + 1), TextDirection.Rtl)
+
+        assertEquals(listOf(rtl, ltr, ltr, rtl, ltr), editor.getParagraphs().map { it.textDirection })
+        assertEquals("rtl" to "ltr", nestedDirsOf(editor.toJson()))
+        val reloaded = editorFrom(editor.toJson())
+        assertEquals(listOf(rtl, ltr, ltr, rtl, ltr), reloaded.getParagraphs().map { it.textDirection })
+    }
+
+    @Test
+    fun selectionAcrossParentAndNestedFlipsBoth() {
+        val editor = editorFrom(nestedListDoc())
+        val from = editor.offsetOf("parent one") + 1
+        val to = editor.offsetOf("child one") + 1
+        editor.setTextDirection(TextRange(from, to), TextDirection.Rtl)
+        assertEquals(listOf(rtl, rtl, rtl, rtl, ltr), editor.getParagraphs().map { it.textDirection })
+        assertEquals("rtl" to "rtl", nestedDirsOf(editor.toJson()))
+    }
+
+    @Test
+    fun adjacentListOfAnotherKindIsASeparateNode() {
         val doc = """{"type":"doc","content":[
-            {"type":"bulletList","attrs":{"dir":"rtl"},"content":[
-              {"type":"listItem","content":[
-                {"type":"paragraph","content":[{"type":"text","text":"parent"}]},
-                {"type":"orderedList","content":[
-                  {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"child"}]}]}
-                ]}
-              ]}
+            {"type":"bulletList","content":[
+              {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"bullet"}]}]}
+            ]},
+            {"type":"orderedList","attrs":{"start":1},"content":[
+              {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"number"}]}]}
             ]}
         ]}"""
         val editor = editorFrom(doc)
-        assertTrue(editor.getParagraphs().all { it.textDirection == TextDirection.Rtl })
-        val list = blocksOf(editor.toJson()).single()
-        val nested = list.children.single().children.first { it.type == "orderedList" }
-        assertEquals("rtl", list.dir)
-        assertEquals("rtl", nested.dir)
+        editor.setTextDirection(TextRange(editor.offsetOf("number") + 1), TextDirection.Rtl)
+        val blocks = blocksOf(editor.toJson())
+        assertEquals(listOf("bulletList", "orderedList"), blocks.map { it.type })
+        assertEquals(listOf("ltr", "rtl"), blocks.map { it.dir })
+    }
+
+    @Test
+    fun nestedListDirectionRoundTripsThroughMarkdownAndHtml() {
+        for ((parent, nested) in listOf("rtl" to "ltr", "ltr" to "rtl", "rtl" to "rtl")) {
+            val editor = editorFrom(nestedListDoc(parent, nested))
+            val md = editor.toMarkdown()
+            assertEquals(parent to nested, nestedDirsOf(editorFrom(markdownToJson(md)).toJson()), md)
+            val html = editor.toHtml()
+            assertEquals(parent to nested, nestedDirsOf(editorFrom(htmlToJson(html)).toJson()), html)
+        }
+    }
+
+    @Test
+    fun htmlStatesLtrOnANestedListInsideAnRtlList() {
+        // HTML inherits `dir`, so without it a browser would render the LTR nested list RTL.
+        val html = editorFrom(nestedListDoc(parentDir = "rtl", nestedDir = "ltr")).toHtml()
+        assertTrue(html.startsWith("<ul dir=\"rtl\">"), html)
+        assertTrue(html.contains("<ol dir=\"ltr\">"), html)
     }
 
     @Test

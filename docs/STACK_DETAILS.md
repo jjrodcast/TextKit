@@ -247,7 +247,7 @@ Node / mark reference:
 | Mark | `link` | `attrs.href`: `String`, `attrs.target`: `String` |
 | Mark | `textStyle` | `attrs.color`: hex `String?`, `attrs.fontSize`: `Int` |
 
-> `dir` is stored per piece like `textAlign` (`RichPiece.textDirection`). On load a list or blockquote passes its direction down to everything inside it (RTL wins when a block and its container disagree); on export the container's `dir` is resolved from its items. An unknown `dir` value coerces to `"ltr"`.
+> `dir` is stored per piece like `textAlign` (`RichPiece.textDirection`). On load a list or blockquote passes its direction to its own paragraphs (RTL wins when a paragraph and its container disagree); a nested `bulletList` / `orderedList` is an independent node and keeps its own `dir`, while a `taskList` (no `dir`) follows its container. On export each list's `dir` is resolved from its own items (nested items excluded). A `Direction` change retags the whole node the caret is in: for a list, the items at the same nesting level and of the same kind, skipping nested lists. An unknown `dir` value coerces to `"ltr"`.
 
 > Unknown `type`s fall back to a `None` node/mark rather than failing to parse. Full, real-world fixtures (with nested lists, mixed colors, etc.) live in `editor/utils/DocumentUtils.kt` as `complexJsonV1`–`complexJsonV6` and `emptyDocument` — pass any of them straight to `load(...)`. Load an empty document with `"{}"`.
 

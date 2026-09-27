@@ -430,21 +430,14 @@ internal abstract class RichTextEditorBasePieceTable :
      * [[start], [end]] — same retagging as [updateTextAlign], so it also works with a collapsed caret.
      *
      * Lists and blockquotes carry `dir` on the container node (`bulletList`, `orderedList`,
-     * `blockquote`), not per item, so when the range's first/last paragraph belongs to one the range
-     * is widened to the whole container (see [containerStartOffset] / [containerEndOffset]): every
-     * item of the list — or paragraph of the quote — flips together and what the editor shows matches
-     * what the export writes. O(R log P) for R affected pieces plus O(K log P) for the K container
-     * paragraphs walked. Returns whether any piece changed.
+     * `blockquote`), not per item, so a paragraph inside one pulls in the rest of its container
+     * (see [directionTargets]): every item of that list — or paragraph of that quote — flips together
+     * and what the editor shows matches what the export writes. O(R log P) for R affected pieces plus
+     * O(K log P) for the K container paragraphs walked. Returns whether any piece changed.
      */
     internal fun updateTextDirection(start: Int, end: Int, textDirection: TextDirection): Boolean {
-        val selected = getLineContent(start, end).paragraphsInSelectedRange
-        if (selected.isEmpty()) return false
-        val first = selected.first()
-        val last = selected.last()
-        val from = if (first.directionContainer == DirectionContainer.None) start else containerStartOffset(first)
-        val to = if (last.directionContainer == DirectionContainer.None) end else containerEndOffset(last)
         var changed = false
-        getLineContent(from, to).paragraphsInSelectedRange.fastForEach { paragraph ->
+        directionTargets(start, end).fastForEach { paragraph ->
             paragraph.pieces.fastForEach { model ->
                 if (model.piece.textDirection == textDirection) return@fastForEach
                 val index = getIndexOf(model)
@@ -456,50 +449,108 @@ internal abstract class RichTextEditorBasePieceTable :
         return changed
     }
 
-    /** Which container node a paragraph belongs to, for [updateTextDirection]'s range widening. */
-    private enum class DirectionContainer { None, List, Blockquote }
-
-    private val PieceParagraph.directionContainer: DirectionContainer
-        get() = when {
-            isListItem -> DirectionContainer.List
-            pieces.any { it.piece.decorator is TextDecoratorModel.BlockquoteDecorator } -> DirectionContainer.Blockquote
-            else -> DirectionContainer.None
-        }
-
     /**
-     * Document offset where the container holding [paragraph] starts: walks back over consecutive
-     * paragraphs of the same container kind (any contiguous list items count as one list).
+     * The paragraphs a direction change over [[start], [end]] retags: each selected paragraph, widened
+     * to the container node it belongs to — its list ([listNodeOf]) or its blockquote
+     * ([blockquoteOf]). A selected paragraph already pulled in by an earlier container is not walked
+     * again. Paragraphs of a nested list are only included when the selection itself touches that
+     * nested list: a nested list is its own `dir` node.
      */
-    private fun containerStartOffset(paragraph: PieceParagraph): Int {
-        val container = paragraph.directionContainer
-        var current = paragraph
-        while (current.startOffset > 0) {
-            val previousEnd = current.startOffset - 1
-            val previous = findFastPiecesMultiLine(previousEnd, previousEnd)
-                .lastOrNull { it.startOffset <= previousEnd } ?: break
-            if (previous.startOffset >= current.startOffset || previous.directionContainer != container) break
-            current = previous
+    private fun directionTargets(start: Int, end: Int): List<PieceParagraph> {
+        val targets = arrayListOf<PieceParagraph>()
+        val included = HashSet<Int>()
+        getLineContent(start, end).paragraphsInSelectedRange.fastForEach { paragraph ->
+            if (paragraph.startOffset in included) return@fastForEach
+            val container = when {
+                paragraph.isListItem -> listNodeOf(paragraph)
+                paragraph.isQuoted -> blockquoteOf(paragraph)
+                else -> listOf(paragraph)
+            }
+            container.fastForEach { if (included.add(it.startOffset)) targets.add(it) }
         }
-        return current.startOffset
+        return targets
     }
 
+    private val PieceParagraph.isQuoted: Boolean
+        get() = pieces.any { it.piece.decorator is TextDecoratorModel.BlockquoteDecorator }
+
+    /** Nesting level of a list-item paragraph (1 = top-level list). */
+    private val PieceParagraph.listLevel: Int get() = startPiece.decorator?.level ?: 0
+
+    /** List kind of a list-item paragraph (numbered / bulleted / task). */
+    private val PieceParagraph.listKey: String? get() = startPiece.decorator?.key
+
     /**
-     * Mirror of [containerStartOffset]: the end offset of the last paragraph in [paragraph]'s
-     * container. A range ending exactly there selects that paragraph (so an empty last item is not
-     * missed) without touching the next one.
+     * The items of the list node holding [item]: the items at [item]'s nesting level and of its kind,
+     * found by walking both ways. Deeper items in between belong to nested lists — their own `dir`
+     * nodes — so they are skipped, not included. The walk stops at a shallower item (the parent
+     * list), at a same-level item of another kind (an adjacent, separate list) or at a non-list
+     * paragraph — the same boundaries the export uses to split list nodes.
      */
-    private fun containerEndOffset(paragraph: PieceParagraph): Int {
-        val container = paragraph.directionContainer
-        var current = paragraph
+    private fun listNodeOf(item: PieceParagraph): List<PieceParagraph> {
+        val level = item.listLevel
+        val key = item.listKey
+        // Returns true to keep walking, false at the node boundary.
+        fun visit(paragraph: PieceParagraph, collect: (PieceParagraph) -> Unit): Boolean {
+            if (!paragraph.isListItem || paragraph.listLevel < level) return false
+            if (paragraph.listLevel > level) return true
+            if (paragraph.listKey != key) return false
+            collect(paragraph)
+            return true
+        }
+
+        val before = ArrayDeque<PieceParagraph>()
+        var current = item
         while (true) {
-            val nextStart = current.endOffset + current.endPiece.length
-            if (nextStart >= rope.totalLength) break
-            val next = findFastPiecesMultiLine(nextStart, nextStart + 1)
-                .firstOrNull { it.startOffset >= nextStart } ?: break
-            if (next.directionContainer != container) break
+            val previous = previousParagraph(current) ?: break
+            if (!visit(previous) { before.addFirst(it) }) break
+            current = previous
+        }
+        val node = ArrayList<PieceParagraph>(before)
+        node.add(item)
+        current = item
+        while (true) {
+            val next = nextParagraph(current) ?: break
+            if (!visit(next) { node.add(it) }) break
             current = next
         }
-        return current.endOffset + current.endPiece.length
+        return node
+    }
+
+    /** The consecutive quoted paragraphs around [paragraph] — the blockquote node holding it. */
+    private fun blockquoteOf(paragraph: PieceParagraph): List<PieceParagraph> {
+        val before = ArrayDeque<PieceParagraph>()
+        var current = paragraph
+        while (true) {
+            val previous = previousParagraph(current)?.takeIf { it.isQuoted && !it.isListItem } ?: break
+            before.addFirst(previous)
+            current = previous
+        }
+        val node = ArrayList<PieceParagraph>(before)
+        node.add(paragraph)
+        current = paragraph
+        while (true) {
+            val next = nextParagraph(current)?.takeIf { it.isQuoted && !it.isListItem } ?: break
+            node.add(next)
+            current = next
+        }
+        return node
+    }
+
+    /** The paragraph right before [paragraph], or null at the document start. O(log P). */
+    private fun previousParagraph(paragraph: PieceParagraph): PieceParagraph? {
+        if (paragraph.startOffset <= 0) return null
+        val previousEnd = paragraph.startOffset - 1
+        return findFastPiecesMultiLine(previousEnd, previousEnd)
+            .lastOrNull { it.startOffset <= previousEnd }
+            ?.takeIf { it.startOffset < paragraph.startOffset }
+    }
+
+    /** The paragraph right after [paragraph], or null at the document end. O(log P). */
+    private fun nextParagraph(paragraph: PieceParagraph): PieceParagraph? {
+        val nextStart = paragraph.endOffset + paragraph.endPiece.length
+        if (nextStart >= rope.totalLength) return null
+        return findFastPiecesMultiLine(nextStart, nextStart + 1).firstOrNull { it.startOffset >= nextStart }
     }
 
     /**

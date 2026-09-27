@@ -266,9 +266,11 @@ state.applyTextDirection(TextDirection.Ltr)   // back to the default
 ```
 
 Lists and blockquotes carry the direction on the **container node**, not per item: with the caret
-inside a list or a quote, the whole list / quote flips (adjacent lists with nothing between them
-count as one). Nested content inherits its container's direction, and RTL wins when a block and its
-container disagree.
+inside a list or a quote, the whole list / quote flips. A **nested list is its own node** — changing
+direction inside it leaves the parent list alone, and changing the parent leaves the nested list
+alone (select across both to change both). An adjacent list of another kind is a separate node too.
+The paragraphs of a list or quote follow its direction (RTL wins if they disagree), and a task list,
+which has no `dir` of its own, follows its container.
 
 An RTL paragraph renders with a right-to-left base direction, and its default `Left` alignment
 follows the direction (it starts at the right edge); an explicit center / right / justify is kept.
@@ -742,9 +744,10 @@ list of block nodes; each block holds inline runs, and inline runs carry `marks`
 also carry an optional `attrs.textAlign` (`"left"` | `"center"` | `"right"` | `"justify"`); the
 default `"left"` is written on export, and any unrecognized value coerces back to `"left"` on load.
 `paragraph`, `heading`, `blockquote`, `bulletList` and `orderedList` carry `attrs.dir` (`"ltr"` |
-`"rtl"`): the default `"ltr"` is always written, any unrecognized value coerces to `"ltr"`, and on a
-list or blockquote it applies to everything inside it. `taskList` has no `dir` of its own and follows
-its container.
+`"rtl"`): the default `"ltr"` is always written and any unrecognized value coerces to `"ltr"`. On a
+list or blockquote it applies to that node's own paragraphs; a nested `bulletList` / `orderedList`
+keeps its own `dir` (it does not inherit its parent list's). `taskList` has no `dir` of its own and
+follows its container.
 
 ```json
 { "type": "bulletList", "attrs": { "dir": "rtl" }, "content": [
