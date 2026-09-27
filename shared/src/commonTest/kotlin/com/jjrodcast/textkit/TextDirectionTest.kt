@@ -224,6 +224,69 @@ class TextDirectionTest {
     }
 
     @Test
+    fun markdownRtlWrapperAroundTaskListKeepsNestedListDirections() {
+        // A task list has no `dir`, so the wrapper's RTL reaches its items' paragraphs — but a nested
+        // bullet/ordered list is an independent node and keeps its own direction.
+        val md = listOf(
+            "<div dir=\"rtl\">",
+            "",
+            "- [ ] ltr nested",
+            "    <div dir=\"ltr\">",
+            "",
+            "    - a",
+            "",
+            "    </div>",
+            "- [x] rtl nested",
+            "    <div dir=\"rtl\">",
+            "",
+            "    1. b",
+            "",
+            "    </div>",
+            "- [ ] bare nested",
+            "    - c",
+            "",
+            "</div>",
+        ).joinToString("\n")
+        val taskList = blocksOf(markdownToJson(md)).single()
+        assertEquals("taskList", taskList.type)
+        val items = taskList.children
+        assertEquals(3, items.size, md)
+        // Each item's own paragraph inherits the wrapper's RTL…
+        assertEquals(listOf("rtl", "rtl", "rtl"), items.map { it.children.first().dir })
+        // …while each nested list keeps its own dir: explicit LTR, explicit RTL, bare (default LTR).
+        val nested = items.map { item -> item.children.first { it.type == "bulletList" || it.type == "orderedList" } }
+        assertEquals(listOf("ltr", "rtl", "ltr"), nested.map { it.dir })
+    }
+
+    @Test
+    fun taskListInsideRtlListWithLtrNestedListRoundTripsThroughMarkdown() {
+        val doc = """{"type":"doc","content":[
+            {"type":"bulletList","attrs":{"dir":"rtl"},"content":[
+              {"type":"listItem","content":[
+                {"type":"paragraph","content":[{"type":"text","text":"parent"}]},
+                {"type":"taskList","content":[
+                  {"type":"taskItem","attrs":{"checked":false},"content":[
+                    {"type":"paragraph","content":[{"type":"text","text":"task"}]},
+                    {"type":"bulletList","attrs":{"dir":"ltr"},"content":[
+                      {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"leaf"}]}]}
+                    ]}
+                  ]}
+                ]}
+              ]}
+            ]}
+        ]}"""
+        val editor = editorFrom(doc)
+        val md = editor.toMarkdown()
+        val reloaded = editorFrom(markdownToJson(md))
+        assertEquals(
+            editor.getParagraphs().map { it.textDirection },
+            reloaded.getParagraphs().map { it.textDirection },
+            md
+        )
+        assertEquals(TextDirection.Ltr, reloaded.getParagraphs().last().textDirection, md)
+    }
+
+    @Test
     fun htmlStatesLtrOnANestedListInsideAnRtlList() {
         // HTML inherits `dir`, so without it a browser would render the LTR nested list RTL.
         val html = editorFrom(nestedListDoc(parentDir = "rtl", nestedDir = "ltr")).toHtml()

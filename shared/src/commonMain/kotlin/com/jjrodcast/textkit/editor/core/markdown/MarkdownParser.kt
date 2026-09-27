@@ -265,7 +265,10 @@ internal class MarkdownParser {
         return i
     }
 
-    /** This block with writing direction [dir]; a task list (no `dir` attr) passes it to its items' paragraphs. */
+    /**
+     * This block — a top-level block of a `<div dir="…">` wrapper — with writing direction [dir]. A
+     * task list (no `dir` attr) passes it on to its items' content via [inheritDirection].
+     */
     private fun BaseParagraph.withDirection(dir: TextDirection): BaseParagraph {
         if (dir == TextDirection.Ltr) return this
         return when (this) {
@@ -275,10 +278,21 @@ internal class MarkdownParser {
             is OrderedList -> copy(attrs = attrs.copy(dir = dir))
             is Blockquote -> copy(attrs = attrs.copy(dir = dir))
             is TaskList -> copy(content = content.map { item ->
-                if (item is TaskListItem) item.copy(content = item.content.map { it.withDirection(dir) }) else item
+                if (item is TaskListItem) item.copy(content = item.content.map { it.inheritDirection(dir) }) else item
             })
             else -> this
         }
+    }
+
+    /**
+     * [dir] inherited by a block nested in a task item — mirroring what the load does: paragraphs,
+     * headings, quotes and nested task lists take the container's direction, but a nested
+     * `bulletList`/`orderedList` is an independent `dir` node and keeps its own (e.g. the LTR a
+     * `<div dir="ltr">` inside the item stated).
+     */
+    private fun BaseParagraph.inheritDirection(dir: TextDirection): BaseParagraph = when (this) {
+        is BulletedList, is OrderedList -> this
+        else -> withDirection(dir)
     }
 
     private fun directionOf(value: String?): TextDirection =
