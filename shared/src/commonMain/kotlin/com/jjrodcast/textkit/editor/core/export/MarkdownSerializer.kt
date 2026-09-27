@@ -86,13 +86,11 @@ internal class MarkdownSerializer : DocumentSerializer {
                 ?: "${Md.Heading.repeat(level)} $body"
         }
 
-        // A list is its own `dir` node (it never inherits a parent list's direction on load), so its
-        // direction is always stated against the default, not against the enclosing container.
-        is BulletedList -> directional(paragraph.attrs.dir, TextDirection.Ltr) { dir ->
+        is BulletedList -> listBlock(paragraph.attrs.dir, inheritedDir) { dir ->
             paragraph.content.joinToString(separator = "\n") { listRow(Md.Bullet, it, dir) }
         }
 
-        is OrderedList -> directional(paragraph.attrs.dir, TextDirection.Ltr) { dir ->
+        is OrderedList -> listBlock(paragraph.attrs.dir, inheritedDir) { dir ->
             val start = paragraph.attrs.start.coerceAtLeast(MIN_LIST_START)
             paragraph.content.mapIndexed { index, item -> listRow("${start + index}${Md.OrderedDot}", item, dir) }
                 .joinToString(separator = "\n")
@@ -115,15 +113,42 @@ internal class MarkdownSerializer : DocumentSerializer {
         own == TextDirection.Rtl && inherited != TextDirection.Rtl
 
     /**
-     * Renders a container block (list, blockquote) whose Markdown syntax cannot carry attributes. An
-     * RTL container is wrapped in a `<div dir="rtl">` HTML block; the blank lines around the content
-     * make GFM keep parsing it as Markdown inside the div. [render] receives the direction its
-     * children inherit.
+     * Renders a blockquote, whose Markdown syntax cannot carry attributes. An RTL quote in a non-RTL
+     * context is wrapped in a `<div dir="rtl">` HTML block (see [directionWrapper]). [render]
+     * receives the direction its children inherit. Lists use [listBlock] instead.
      */
     private fun directional(own: TextDirection, inherited: TextDirection, render: (TextDirection) -> String): String {
         val body = render(TextDirection.resolve(own, inherited))
-        if (!emitsDir(own, inherited) || body.isEmpty()) return body
-        return "<${Html.Div}${htmlAttr(Html.Dir, DIR_RTL)}>$BLOCK_SEPARATOR$body$BLOCK_SEPARATOR</${Html.Div}>"
+        return if (emitsDir(own, inherited)) directionWrapper(body, TextDirection.Rtl) else body
+    }
+
+    /**
+     * Renders a list — an independent `dir` node: on load it never inherits the direction of the
+     * list or quote around it, and its children follow the list's own [own] direction. So:
+     * - an RTL list is always wrapped in `<div dir="rtl">`, even inside an RTL container (the
+     *   importer applies a wrapper's direction to its top-level blocks only, not to nested lists);
+     * - an LTR list inside an RTL [inherited] context is wrapped in `<div dir="ltr">`, otherwise the
+     *   enclosing RTL div would make Markdown consumers render it right-to-left (the HTML export
+     *   states `dir="ltr"` in the same case);
+     * - an LTR list in an LTR context stays bare.
+     */
+    private fun listBlock(own: TextDirection, inherited: TextDirection, render: (TextDirection) -> String): String {
+        val body = render(own)
+        return when {
+            own == TextDirection.Rtl -> directionWrapper(body, TextDirection.Rtl)
+            inherited == TextDirection.Rtl -> directionWrapper(body, TextDirection.Ltr)
+            else -> body
+        }
+    }
+
+    /**
+     * Wraps [body] in a `<div dir="…">` HTML block; the blank lines around the content make GFM keep
+     * parsing it as Markdown inside the div. An empty [body] stays empty.
+     */
+    private fun directionWrapper(body: String, dir: TextDirection): String {
+        if (body.isEmpty()) return body
+        val value = if (dir == TextDirection.Rtl) DIR_RTL else DIR_LTR
+        return "<${Html.Div}${htmlAttr(Html.Dir, value)}>$BLOCK_SEPARATOR$body$BLOCK_SEPARATOR</${Html.Div}>"
     }
 
     /** Renders [blocks] and prefixes every line with `> `, so nested block content stays quoted. */
@@ -409,6 +434,7 @@ internal class MarkdownSerializer : DocumentSerializer {
         const val NESTED_INDENT = "    "
         const val MIN_LIST_START = 1
         const val DIR_RTL = "rtl"
+        const val DIR_LTR = "ltr"
 
         /** Inline Markdown metacharacters backslash-escaped in text so they render literally. */
         val MARKDOWN_METACHARACTERS = setOf('`', '*', '_', '[', ']', '~', '|')

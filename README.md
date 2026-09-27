@@ -143,7 +143,7 @@ and `~~strikethrough~~` are all native. It is deliberately **lossy**: marks GFM 
 (underline, highlight, a colour/size text style, paragraph alignment, text direction) fall back to
 inline HTML (`<u>`, `<mark>`, `<span style="…">`, `<p style="text-align:…">`, `<p dir="rtl">`); an
 RTL list or blockquote is wrapped in a `<div dir="rtl">` block, since their Markdown syntax takes no
-attributes. Inline tokens become plain `@label` /
+attributes (an LTR list nested in an RTL one gets a `<div dir="ltr">`, so it does not render RTL). Inline tokens become plain `@label` /
 `#label` text (their `data-id` identity is dropped), and a blank paragraph has no Markdown form. Keep
 `toJson()` for a lossless round-trip;
 reach for `toMarkdown()` when sharing to a Markdown surface (READMEs, chat, notes).

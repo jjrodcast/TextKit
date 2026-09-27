@@ -1,9 +1,17 @@
 package com.jjrodcast.textkit
 
 import androidx.compose.ui.text.TextRange
+import com.jjrodcast.textkit.editor.core.export.MarkdownSerializer
 import com.jjrodcast.textkit.editor.core.html.htmlToJson
 import com.jjrodcast.textkit.editor.core.markdown.markdownToJson
+import com.jjrodcast.textkit.editor.core.parser.Blockquote
+import com.jjrodcast.textkit.editor.core.parser.BlockquoteAttrs
+import com.jjrodcast.textkit.editor.core.parser.BulletedList
+import com.jjrodcast.textkit.editor.core.parser.ListItem
+import com.jjrodcast.textkit.editor.core.parser.Paragraph
+import com.jjrodcast.textkit.editor.core.parser.Text
 import com.jjrodcast.textkit.editor.core.parser.TextDirection
+import com.jjrodcast.textkit.editor.core.parser.TextEditorDocument
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -178,6 +186,41 @@ class TextDirectionTest {
             val html = editor.toHtml()
             assertEquals(parent to nested, nestedDirsOf(editorFrom(htmlToJson(html)).toJson()), html)
         }
+    }
+
+    @Test
+    fun markdownStatesLtrOnANestedListInsideAnRtlList() {
+        // The outer <div dir="rtl"> would otherwise make Markdown consumers render the LTR nested
+        // list right-to-left — same reason the HTML export states dir="ltr".
+        val md = editorFrom(nestedListDoc(parentDir = "rtl", nestedDir = "ltr")).toMarkdown()
+        assertTrue(md.startsWith("<div dir=\"rtl\">\n\n- parent one\n    <div dir=\"ltr\">\n\n    1. child one"), md)
+        assertEquals("rtl" to "ltr", nestedDirsOf(editorFrom(markdownToJson(md)).toJson()), md)
+    }
+
+    @Test
+    fun markdownKeepsAnRtlWrapperOnANestedRtlListInsideAnRtlList() {
+        // A nested list never inherits on import, so an RTL one needs its own wrapper.
+        val md = editorFrom(nestedListDoc(parentDir = "rtl", nestedDir = "rtl")).toMarkdown()
+        assertTrue(md.contains("    <div dir=\"rtl\">\n\n    1. child one"), md)
+        assertFalse(md.contains("dir=\"ltr\""), md)
+    }
+
+    @Test
+    fun markdownLeavesAnLtrNestedListBareInsideAnLtrList() {
+        val md = editorFrom(nestedListDoc()).toMarkdown()
+        assertFalse(md.contains("<div"), md)
+    }
+
+    @Test
+    fun markdownStatesLtrOnAListInsideAnRtlBlockquote() {
+        val list = BulletedList(content = listOf(ListItem(listOf(Paragraph(content = listOf(Text("item")))))))
+        val quote = Blockquote(content = listOf(list), attrs = BlockquoteAttrs(dir = TextDirection.Rtl))
+        val md = MarkdownSerializer().serialize(TextEditorDocument(listOf(quote)))
+        assertEquals("<div dir=\"rtl\">\n\n> <div dir=\"ltr\">\n>\n> - item\n>\n> </div>\n\n</div>", md)
+        val reparsed = blocksOf(markdownToJson(md)).single()
+        assertEquals("blockquote" to "rtl", reparsed.type to reparsed.dir)
+        val inner = reparsed.children.single()
+        assertEquals("bulletList" to "ltr", inner.type to inner.dir)
     }
 
     @Test
