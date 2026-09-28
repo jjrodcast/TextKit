@@ -105,7 +105,7 @@ fun TextKitEditor(
         textStyle = TextStyle(color = TextKitTheme.colors.onSurface),
         cursorBrush = SolidColor(TextKitTheme.colors.primary),
         decorationBox = { innerTextField ->
-            Box {
+            Box(propagateMinConstraints = true) {
                 if (state.textFieldValue.text.isEmpty()) {
                     Text(
                         text = stringResource(Res.string.type_text),
