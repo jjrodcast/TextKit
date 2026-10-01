@@ -9,7 +9,6 @@ import com.jjrodcast.textkit.editor.components.TextEditorListItem.None
 import com.jjrodcast.textkit.editor.components.TextEditorListItem.NumberedList
 import com.jjrodcast.textkit.editor.core.converters.ListsConverter
 import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem
-import com.jjrodcast.textkit.editor.core.converters.models.PositionalListItem.Companion.getNewDecoratorLength
 import com.jjrodcast.textkit.editor.core.converters.utils.PositionalListItemUtils
 import com.jjrodcast.textkit.editor.core.converters.utils.createTransactions
 import com.jjrodcast.textkit.editor.core.models.MultiPieceParagraph
@@ -118,7 +117,7 @@ internal object ListItemTransaction {
         val flattenItems = PositionalListItemUtils.reorderItems(multiPieceParagraph = updatedLines, coerceLevel = true)
         val modifiedItem = flattenItems.firstOrNull { it.index == currentIndex }
         val transactions = flattenItems.createTransactions(listOf(modifiedItem))
-        val offset = modifiedItem.getNewDecoratorLength()
+        val offset = modifiedItem?.newRichPiece?.decorator.createDecoratorString().length
         return Pair(transactions, TextRange(start = range.start + offset, end = range.end + offset))
     }
 
@@ -154,18 +153,10 @@ internal object ListItemTransaction {
         val positionalListItems = PositionalListItemUtils.decreaseLevels(lines, listOf(currentIndex))
         val flattenItems = PositionalListItemUtils.reorderItems(items = positionalListItems, coerceLevel = false)
         val transactions = flattenItems.createTransactions()
-        val length = flattenItems.firstOrNull { it.index == currentIndex }.getNewDecoratorLength()
-        // Clamp both endpoints at 0: for the first item `range.start` is at/near the document
-        // start, so subtracting the removed decorator width would otherwise underflow and make
-        // `TextRange` throw. For any non-first item `range.start - length` is already >= 0, so
-        // the coercion is a no-op there.
-        return Pair(
-            transactions,
-            TextRange(
-                start = (range.start - length).coerceAtLeast(0),
-                end = (range.end - length).coerceAtLeast(0)
-            )
-        )
+        val shifted = ListItemTextEditorRangeUtils.getTextEditorRangeForCollapsed(flattenItems, currentIndex, range)
+        val paragraphStart = lines.paragraphs[currentIndex].startOffset
+        val start = shifted.start.coerceAtLeast(paragraphStart)
+        return Pair(transactions, TextRange(start = start, end = shifted.end.coerceAtLeast(start)))
     }
 
     private fun updateNestedListItems(
