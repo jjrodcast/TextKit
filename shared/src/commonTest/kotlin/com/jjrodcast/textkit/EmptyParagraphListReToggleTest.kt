@@ -3,6 +3,8 @@ package com.jjrodcast.textkit
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.jjrodcast.textkit.editor.models.createTextKitConfiguration
+import com.jjrodcast.textkit.editor.utils.BULLET_DECORATOR_LEVEL_ONE
+import com.jjrodcast.textkit.editor.utils.TABS
 import com.jjrodcast.textkit.ui.state.TextKitState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -57,7 +59,9 @@ class EmptyParagraphListReToggleTest {
         state.onTextFieldChange(state.textFieldValue.copy(selection = TextRange(11)))
 
         assertTrue(state.toggleUnorderedList(true))
-        assertEquals(TextRange(15), state.selection, "caret must stay after the item text")
+        // The decorator's flat width is platform-dependent (`TABS` is shorter on iOS).
+        val decoratorWidth = TABS.length + BULLET_DECORATOR_LEVEL_ONE.length
+        assertEquals(TextRange(11 + decoratorWidth), state.selection, "caret must stay after the item text")
         assertTrue(state.toggleUnorderedList(false))
 
         assertEquals(TextRange(11), state.selection)
